@@ -18,6 +18,7 @@ data/_shard_*.npz
 data/*.gz
 data/gomokuparty/
 data/gomocup/
+data/engines/
 
 # 模型快照：数据 + 一条训练命令即可复现
 ckpt/**/model.pt
