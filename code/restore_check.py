@@ -36,8 +36,12 @@ for t in ("tests.py", "test_solvers.py", "test_value_target.py", "test_dataset.p
     r = run([sys.executable, os.path.join("code", t)])
     last = (r.stdout.strip().splitlines() or ["(no output)"])[-1]
     ok = r.returncode == 0
+    if last.upper().startswith("SKIP"):
+        state = "SKIP"
+    else:
+        state = "PASS" if ok else "FAIL"
     fails += 0 if ok else 1
-    print(f"  {t:<22}{'PASS' if ok else 'FAIL'}  {last}")
+    print(f"  {t:<22}{state}  {last}")
 
 print("\n=== 4. dataset loader ===")
 sys.path.insert(0, os.path.abspath("code"))
