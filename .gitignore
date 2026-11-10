@@ -18,6 +18,7 @@ data/gomocup/
 ckpt/**/model.pt
 ckpt/**/best.pt
 ckpt/**/*.pt
+ckpt/runs/
 
 # 基线的 manifest 保留在 git 里（它是"跑过什么"的记录），但权重不提交。
 # 如果连 manifest 也不想提交，把下一行的注释去掉。
