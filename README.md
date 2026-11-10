@@ -9,11 +9,24 @@
 
 ## 快速开始
 
+模型权重和数据集体积较大，不在 git 里，发布在 Hugging Face 上。**克隆之后先跑一次下载脚本**，它会取回三个文件并逐个校验 SHA-256（共约 4.7 MB，可重复执行，已存在的会跳过）：
+
+```
+python code/fetch_data.py
+```
+
+然后启动对弈界面：
+
 ```
 python app.py          # Windows 上也可以直接双击 app.bat
 ```
 
-在 `http://127.0.0.1:8765` 打开本地对弈界面（端口被占用时自动换一个空闲端口）。选对手、选执子、直接下。除了 Python 3 和 PyTorch 没有别的依赖。
+在 `http://127.0.0.1:8765` 打开本地对弈界面（端口被占用时自动换一个空闲端口）。选对手、选执子、直接下。
+
+依赖只有 Python 3、PyTorch 和 NumPy。`fetch_data.py` 用的是标准库 HTTP，不需要登录 Hugging Face，也不需要 `huggingface_hub`。
+
+> 只想看代码、不打算跑的话可以跳过第 1 步；但要跑测试、训练或对弈，三个文件必须有。
+> `python code/fetch_data.py --check` 只校验不下载。
 
 ## 目录
 
@@ -40,6 +53,7 @@ gomoku/
     train_policy.py     价值 + 策略训练
     freeze_baseline.py  把 checkpoint 冻结成不可变基线
     push_hf.py          发布到 Hugging Face
+    fetch_data.py       从 Hugging Face 取回权重与数据集（克隆后先跑这个）
     baseline_duel.py    基线 vs 外部对手，配对赛
     eval_three.py       多个模型互相打，逐对给分
     bench_solver.py     VCF / 威胁检测的基准
