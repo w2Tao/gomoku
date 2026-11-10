@@ -7,8 +7,10 @@ venv/
 
 # 数据集：由 code/build_*.py 重新生成，常见体积几百 MB
 data/*.npz
-# ...but the Gomocup-derived dataset is a curated artefact worth versioning
-!data/gomocup15.npz
+# Datasets are published on Hugging Face instead of git:
+#   gomocup15.npz, teacher15.npz -> w2Tao/gomoku-15x15
+# Everything else here is regenerable by code/build_*.py.
+
 data/teacher15.npz
 data/*.npy
 data/selfplay/
