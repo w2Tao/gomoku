@@ -90,11 +90,13 @@ python code/fetch_engines.py --list
 python code/duel_engine.py EMBRYO26 baseline 20 --time-ms 300
 ```
 
-引擎通过 pbrain 协议（stdin/stdout 文本）驱动：`START 15` → `OK` → `INFO timeout_turn <ms>` → `BEGIN` → 每次对手落子发 `TURN x,y`，读回它的坐标。
+引擎通过 pbrain 协议（stdin/stdout 文本）驱动。**坐标是 0-based（0–14），不是 1-based** ——这一点搞错会让每颗子偏一格，两边棋盘从第一手起就分叉，表现为引擎走了"已被占据"的格子。另外三个坑：
 
-两个实现细节值得知道：`INFO` **必须**等 `START` 返回 `OK` 之后再发，否则被丢弃、引擎按自己的默认时限思考（EMBRYO 会每步想 20 秒）；引擎超过 10 秒没有任何输出就判定卡死并杀掉，下一局重启进程——复用同一个进程会让上一局的残留输出串进下一局。
+* `INFO timeout_turn` **必须**等 `START` 返回 `OK` 之后再发，否则被丢弃，引擎按自己的默认时限思考（EMBRYO 会每步想 20 秒）
+* `BEGIN` 的行为因引擎而异：TITO14/RAPFI25 收到 `BEGIN` 会**不管轮次立刻走一步**，所以执白时不能发；EMBRYO26 相反，没有 `BEGIN` 就沉默。注册表里用 `begin_white` 标注
+* 超过设定时间没有任何输出就判定卡死、杀进程；每局重启进程，否则上一局的残留输出会串进下一局。慢引擎（EMBRYO）需要把阈值放宽到 25 秒
 
-> 已知问题：部分引擎（TITO14）在长对局中会出现棋盘状态分歧，表现为 `engine returned an illegal cell`，这类对局会被中止并计入统计。EMBRYO26 目前最稳定。
+实测稳定性：TITO14 24/24 局完成、EMBRYO26 12/12 局完成，均无中止。
 
 ## 管道
 

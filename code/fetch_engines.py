@@ -30,10 +30,15 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 # prefer: substring of the executable to use. Engines ship rule-specific builds --
 # EMBRYO has _r/_c5/_s/_f variants and only _f is freestyle -- and picking the
 # wrong one silently plays a different game.
+# begin_white: send BEGIN when the engine is White. EMBRYO26 needs it; TITO14 and
+# RAPFI25 answer BEGIN with a move regardless of whose turn it is, so they must
+# not receive it (see pbrain.Pbrain.begin).
+# stall_s: seconds of silence before the engine is declared wedged. EMBRYO's
+# search occasionally overruns 300 ms by a lot; 10 s produced spurious kills.
 ENGINES = {
     "RAPFI25": dict(prefer="rapfi_avx2", size=42.3,
                     note="2026 champion. NNUE; needs a time limit or it deepens forever"),
-    "EMBRYO26": dict(prefer="_f", size=6.3,
+    "EMBRYO26": dict(prefer="_f", size=6.3, begin_white=True, stall_s=25.0,
                      note="2026 6th place, classical alpha-beta; use the _f build"),
     "MONAS": dict(prefer="Monas_x64", size=0.6,
                   note="2026; BUG: emits x=0 along the left edge"),

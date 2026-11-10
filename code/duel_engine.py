@@ -27,10 +27,14 @@ from play import PolicyAgent
 from pbrain import EngineError, Pbrain, find_exe
 
 
+TRACE = []
+
+
 def play_game(engine, our_agent, rng, timeout, engine_black, opening):
     """-> 0 if our agent won, 1 if the engine won, None for a draw."""
     our_colour = 1 if engine_black else 0
     engine_colour = 1 - our_colour
+    TRACE.clear()
     bb = [0, 0]
     last = -1
     random_left = opening
@@ -48,7 +52,7 @@ def play_game(engine, our_agent, rng, timeout, engine_black, opening):
             if mv is None:
                 raise EngineError("engine owed a move but sent nothing")
             x, y = mv
-            cell = (y - 1) * 15 + (x - 1)
+            cell = y * 15 + x
             if not (0 <= cell < CELLS) or (occ >> cell) & 1:
                 raise EngineError(f"engine returned an illegal cell {(x, y)}")
         elif random_left > 0:
@@ -59,13 +63,14 @@ def play_game(engine, our_agent, rng, timeout, engine_black, opening):
             if cell is None:
                 return None
 
+        TRACE.append((len(TRACE), "E" if turn == engine_colour else "U", cell))
         bb[turn] |= 1 << cell
         last = cell
         if has_five(bb[turn]):
             return 0 if turn == our_colour else 1
         turn ^= 1
         if turn == engine_colour:
-            mv = engine.play(last % 15 + 1, last // 15 + 1, timeout)
+            mv = engine.play(last % 15, last // 15, timeout)
     return None
 
 
@@ -76,8 +81,9 @@ def main():
     ap.add_argument("games", nargs="?", type=int, default=40)
     ap.add_argument("--prefer", default=None, help="substring of the exe to use")
     ap.add_argument("--time-ms", type=int, default=500, help="per move")
-    ap.add_argument("--stall-s", type=float, default=10.0,
-                    help="kill the engine after this long with no output")
+    ap.add_argument("--stall-s", type=float, default=None,
+                    help="kill the engine after this long with no output "
+                         "(default: the engine's registered value, else 10)")
     ap.add_argument("--opening", type=int, default=2,
                     help="random moves our agent plays before thinking")
     ap.add_argument("--verbose", action="store_true")
@@ -98,8 +104,12 @@ def main():
 
     rng = random.Random(7)
     wins = losses = draws = errors = 0
+    meta = ENGINE().get(args.engine, {})
+    stall = args.stall_s if args.stall_s is not None else meta.get("stall_s", 10.0)
+    print(f"stall    : {stall:.0f}s of silence before a kill\n", flush=True)
     eng = Pbrain(exe, time_ms=args.time_ms, verbose=args.verbose,
-                 stall_s=args.stall_s)
+                 stall_s=stall,
+                 begin_white=meta.get("begin_white", False))
     for i in range(args.games):
         engine_black = i % 2 == 1
         try:
@@ -114,6 +124,9 @@ def main():
             print(f"  game {i + 1} "
                   f"({'engine black' if engine_black else 'engine white'}): {e}",
                   flush=True)
+            tail = " ".join(f"{ply}{who}{cell}"
+                            for ply, who, cell in TRACE[-14:])
+            print(f"    last plies ({len(TRACE)} total): {tail}", flush=True)
             continue
         finally:
             try:

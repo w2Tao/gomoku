@@ -35,11 +35,13 @@ class EngineError(RuntimeError):
 
 class Pbrain:
     def __init__(self, exe, time_ms: int = 500, match_ms: int = 60000,
-                 verbose: bool = False, stall_s: float = 10.0):
+                 verbose: bool = False, stall_s: float = 10.0,
+                 begin_white: bool = False):
         self.exe = os.path.abspath(exe)
         self.time_ms = time_ms
         self.match_ms = match_ms
         self.stall_s = stall_s
+        self.begin_white = begin_white
         self.verbose = verbose
         self.proc = None
         self._q = None
@@ -152,16 +154,18 @@ class Pbrain:
 
     @staticmethod
     def _is_move(line):
-        """Strictly a board coordinate, 1..15.
+        """Strictly a board coordinate, 0..14.
 
-        Engines emit other comma-separated lines that look like a move at a
-        glance; accepting them produced nonsense cells such as (13, 0). pbrain
-        coordinates are 1-indexed, so anything out of range is not a move.
+        Gomocup's pbrain coordinates are **0-based**, not 1-based: `TURN 0,0` is
+        accepted by every engine here, and a `y` of 15 is rejected with "invalid
+        coordinates". Reading them as 1-based put every stone one cell off in both
+        axes, so our board and the engine's diverged from the first move and the
+        engine eventually played onto a cell we considered occupied.
         """
         a, _, b = line.partition(",")
         if not (a.isdigit() and b.isdigit()):
             return False
-        return 1 <= int(a) <= 15 and 1 <= int(b) <= 15
+        return 0 <= int(a) <= 14 and 0 <= int(b) <= 14
 
     def _read_move(self, timeout):
         line = self._await(self._is_move, timeout)
@@ -170,17 +174,26 @@ class Pbrain:
 
     # ---- game setup ---------------------------------------------------
     def begin(self, engine_black: bool):
-        """Start a game from an empty board. Returns the engine's move or None.
+        """Start a game from an empty board. Returns the engine's first move or None.
 
-        `BOARD` is deliberately not used. Its semantics differ between engines --
-        `DONE` makes some search immediately regardless of whose turn it is, the
-        `who` field is not uniform, and setting up a prefix reliably diverged from
-        the engine's own board (subsequent `TURN`s hit occupied cells). The plain
-        `BEGIN` + `TURN` flow is what every engine actually implements.
+        Engines disagree about `BEGIN` when they are White, and the difference is
+        not cosmetic -- it shifts the game by one ply and desynchronises the two
+        boards:
+
+        * TITO14 / RAPFI25 answer `BEGIN` with a move immediately, whoever is
+          supposed to move. They must be started with `TURN` for Black's first
+          move and no `BEGIN` at all (`begin_white=False`).
+        * EMBRYO26 stays silent unless it receives `BEGIN`, then waits properly
+          for `TURN` (`begin_white=True`).
+
+        `BOARD` is not used: its semantics differ between engines and the board it
+        produced diverged from the engine's own.
         """
-        self._send("BEGIN")
         if engine_black:
+            self._send("BEGIN")
             return self._read_move(max(5000, self.time_ms * 20))
+        if self.begin_white:
+            self._send("BEGIN")
         return None
 
     def play(self, x, y, timeout=None):
