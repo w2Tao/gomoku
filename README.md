@@ -26,6 +26,7 @@ gomoku/
     solvers.py          窗口工具、3 层强制胜检测
     vcf.py              VCF 搜索（限定深度的连续冲四）
     labeler.py          对称的 +1/-1/未知 标注
+    value_target.py     价值目标的可执行规范（透视、和棋、样本量）
     model.py            ValueNet、ValuePolicyNet
     dataset.py          磁盘布局（N, WORDS）uint64、平面、二面体变换
     play.py             各类 agent：搜索 / 启发式 / 贪心 / 随机 / 策略
@@ -38,8 +39,11 @@ gomoku/
     train.py            价值网络训练
     train_policy.py     价值 + 策略训练
     freeze_baseline.py  把 checkpoint 冻结成不可变基线
-    paired_eval.py、baseline_duel.py、eval_three.py、depth_check.py、
-    eval_value_by_ply.py、bench_solver.py
+    push_hf.py          发布到 Hugging Face（--dry-run 可离线看清单）
+    baseline_duel.py    基线 vs 外部对手，配对赛
+    eval_three.py       多个模型互相打，逐对给分
+    bench_solver.py     VCF / 威胁检测的基准
+    restore_check.py    验证「GitHub + Hub 能否还原项目」
   ckpt/                 模型快照
     <baseline-id>/      model.pt + manifest.json，界面自动发现（manifest 进版本库）
     runs/<tag>/         训练过程的 checkpoint（已 git 忽略）

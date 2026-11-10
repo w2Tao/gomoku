@@ -225,9 +225,9 @@ policy  Conv1x1(C -> 1) -> flatten（CELLS 个 logits）+ 可学习的 CELLS 维
 
 | 工具 | 适用 | 局限 |
 |---|---|---|
-| `paired_eval.py` / `baseline_duel.py` / `eval_three.py` | 对**外部**对手 | 对手太弱时 97–99% 饱和 |
+| `baseline_duel.py` / `eval_three.py` | 对**外部**对手、或模型互相打 | 对手太弱时 97–99% 饱和 |
 | 变体头对头 | 两个启发式变体之间 | 700 局才 ±1.9 点 |
-| 客观题目基准 | 命中率，无对局噪声 | 必须保证「该规则是唯一正确解」 |
+| `restore_check.py` | 验证「GitHub + Hub 能否还原项目」 | 只查能否跑通，不查强度 |
 
 最后一条的坑踩过：第一版基准把「我用别的合理着法应对」记成「漏掉」，报出 15% 的假
 缺陷。**只有排除「有更好选择」的局面，这个指标才有意义**——又一次撞上第 9 节。
@@ -242,7 +242,7 @@ policy  Conv1x1(C -> 1) -> flatten（CELLS 个 logits）+ 可学习的 CELLS 维
 
 ## 9. 评估方法学，以及它的陷阱
 
-用 `paired_eval.py` / `baseline_duel.py`。它们会：
+用 `baseline_duel.py` / `eval_three.py`。它们会：
 
 * 随机化开局的前几手，让对局真正互不相同；
 * 让每个 agent 面对**同一批**开局，因此比较是配对的，先手优势自动抵消；

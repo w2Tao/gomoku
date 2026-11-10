@@ -19,7 +19,7 @@ import torch
 import baselines
 import paths
 from engine import CELLS, has_five
-from play import GreedyPlusAgent, HeuristicAgent, SearchAgent
+from play import PolicyAgent, SearchAgent, frozen_heuristic
 
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 150
 OPENING = 4
@@ -93,9 +93,12 @@ def main():
     for bid in IDS:
         net, man = baselines.load_baseline(bid, dev)
         depth = man.get("inference", {}).get("search_depth_plies", 1) or 1
-        agents[bid] = SearchAgent(net, dev, plies=depth)
+        if man.get("model_type") == "value_policy":
+            agents[bid] = PolicyAgent(net, dev)
+        else:
+            agents[bid] = SearchAgent(net, dev, plies=depth)
         print(f"{bid:<12} depth {depth}  ->  {man['name']}")
-    ref = GreedyPlusAgent()
+    ref = frozen_heuristic()
     openings = make_openings(N, OPENING)
     print()
     print(f"{N} openings x 2 colours = {2*N} games per matchup, "
@@ -103,7 +106,7 @@ def main():
     print()
 
     res = {}
-    print(f"{'agent':<14}{'vs greedy+':>12}{'sigma vs base':>16}")
+    print(f"{'agent':<14}{'vs heuristic':>12}{'sigma vs base':>16}")
     print("-" * 44)
     for bid in IDS:
         res[bid] = scores(agents[bid], ref, openings)

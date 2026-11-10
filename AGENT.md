@@ -28,7 +28,7 @@
 | 数据 | `dataset.py`、`build_*.py`、`paths.py` | 格式、标签生成 |
 | 模型 | `model.py`、`train*.py` | 结构、损失 |
 | Agent | `play.py`、`baselines.py` | 搜索、各类 agent |
-| 评估 | `paired_eval.py`、`*_duel.py`、`depth_check.py`、`eval_*.py`、`analyze_*.py` | 测量 |
+| 评估 | `baseline_duel.py`、`eval_three.py`、`bench_solver.py`、`restore_check.py` | 测量 |
 | 界面 | `server.py`、`web/index.html`、`app.py` | 对弈界面 |
 | 文档 | `README.md`、`manual.md`、`report.md`、`AGENT.md` | 这四份 |
 
@@ -49,13 +49,16 @@ python code/test_value_target.py
 python code/test_dataset.py     # 没有 data/_smoke.npz 会跳过
 ```
 
-任何声称"更强"或"更准"的改动，还要：
+任何声称"更强"或"更准"的改动，还要真的打一局：
 
 ```bash
-python code/paired_eval.py 200 1 4 <tag>     # 配对、随机开局
-python code/heuristic_duel.py 150            # 规则型变体之间
-python code/depth_check.py 80 selective      # 先看 Q 区分度，再看胜率
+python code/baseline_duel.py 200 baseline      # 基线 vs 冻结启发式，配对换色
+python code/eval_three.py 200                  # 多个模型互相打（需 ckpt/runs/）
 ```
+
+**上表里的命令都必须真的能跑通。** 曾经有一版文档推荐了三个依赖已删除数据格式的
+脚本（`depth_check.py`、`eval_value_by_ply.py`、`paired_eval.py`），它们全部运行即崩——
+文档里写命令之前，先跑一遍。
 
 一次 30 秒的冒烟构建很值：
 
@@ -66,7 +69,7 @@ python code/train.py --data data/_smoke.npz --steps 300 --tag smoke
 
 ## 4. 命令分级：安全 / 昂贵 / 破坏性
 
-**安全** —— 测试、`--help`、阅读、`depth_check.py` 筛选、`push_hf.py --dry-run`。
+**安全** —— 测试、`--help`、阅读、`bench_solver.py`、`push_hf.py --dry-run`。
 
 **昂贵** —— 任何生成标签或训练的：
 `build_dataset.py`（约 15 局面/秒）、`build_teacher_dataset.py`（12 进程约 2 分钟）、`train_policy.py`（数分钟）。这类一律放后台，**并且第一分钟内报速率**，不要盲等。
