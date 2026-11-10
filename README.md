@@ -54,6 +54,8 @@ gomoku/
     freeze_baseline.py  把 checkpoint 冻结成不可变基线
     push_hf.py          发布到 Hugging Face
     fetch_data.py       从 Hugging Face 取回权重与数据集（克隆后先跑这个）
+    fetch_engines.py    下载 Gomocup 引擎，用作外部标尺
+    duel_engine.py      我方模型 vs Gomocup 引擎（pbrain 协议）
     baseline_duel.py    基线 vs 外部对手，配对赛
     eval_three.py       多个模型互相打，逐对给分
     bench_solver.py     VCF / 威胁检测的基准
