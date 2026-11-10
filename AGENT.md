@@ -66,10 +66,14 @@ python code/train.py --data data/_smoke.npz --steps 300 --tag smoke
 
 ## 4. 命令分级：安全 / 昂贵 / 破坏性
 
-**安全** —— 测试、`--help`、阅读、`depth_check.py` 筛选、`analyze_*`。
+**安全** —— 测试、`--help`、阅读、`depth_check.py` 筛选、`push_hf.py --dry-run`。
 
 **昂贵** —— 任何生成标签或训练的：
-`build_dataset.py`（约 15 局面/秒）、`build_rollout_dataset.py`（约 0.5 秒/局面 × 64 次）、`train.py`（数分钟）。这类一律放后台，**并且第一分钟内报速率**，不要盲等。
+`build_dataset.py`（约 15 局面/秒）、`build_teacher_dataset.py`（12 进程约 2 分钟）、`train_policy.py`（数分钟）。这类一律放后台，**并且第一分钟内报速率**，不要盲等。
+
+**对外发布** —— `code/push_hf.py` 会把权重和数据集传到公开的 Hugging Face 仓库，
+不可撤销（只能覆盖）。跑之前先 `--dry-run` 看清单，并确认自己没有在未授权的情况下
+转发第三方数据：`gomocup15.npz` 派生自 Gomocup 棋谱，该来源没有声明许可证。
 
 **破坏性** —— `ckpt/` 或 `data/` 下的任何东西。删掉一个数据集或一份备份的 checkpoint 是不可逆的，并且会让所有引用过它的数字失效。**删之前先说清楚删什么、为什么。**
 

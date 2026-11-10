@@ -37,3 +37,6 @@ Desktop.ini
 # Hugging Face staging: binaries are copied here at upload time
 hf/_stage_model/
 hf/_stage_dataset/
+
+# Hugging Face download cache (sandbox-friendly location)
+.hf_cache/

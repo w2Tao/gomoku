@@ -102,6 +102,19 @@ python code/eval_three.py 100
 
 两个最该记住的数字：**VCF 超过深度 5 之后几乎不再增长**（5→7 只多 0.3 个百分点，成本翻倍）；**均匀随机 rollout 的结果标签只带 0.011 bit**——棋盘越大，乱下的结果越接近抛硬币，所以这条路已被彻底放弃。
 
+## 已发布
+
+模型和数据集都在 Hugging Face 上，公开可下载：
+
+| 仓库 | 内容 |
+|---|---|
+| [`w2Tao/gomoku-baseline`](https://huggingface.co/w2Tao/gomoku-baseline) | 完整权重 `model.pt`（0.76 MB，value + policy 双头）、`manifest.json` |
+| [`w2Tao/gomoku-15x15`](https://huggingface.co/datasets/w2Tao/gomoku-15x15) | `gomocup15.npz`（50 万局面）、`teacher15.npz`（15 万局面） |
+
+发布用 `python code/push_hf.py --user w2Tao`，需要先 `hf auth login`；提交前建议先跑 `--dry-run`。
+两份仓库的 README 卡片分别写在 `hf/model/README.md` 和 `hf/dataset/README.md`，改卡片后重跑一次即可更新。
+上传后会做 SHA-256 往返校验，确认 Hub 上的字节与本地一致。
+
 ## 文档
 
 * [`manual.md`](manual.md) —— 原理、方法学、失败原因和 bug 目录，**不含具体数字**。

@@ -17,6 +17,10 @@ tags:
 
 **185,724 参数**，单次前向直接给出每个格子的分数，取合法格中最高者落子——**没有搜索、没有 VCF、没有双三检测**。仍然在 200 局配对中胜过了本仓库冻结的规则型启发式 **65.5%**。
 
+训练数据在 [`w2Tao/gomoku-15x15`](https://huggingface.co/datasets/w2Tao/gomoku-15x15)：
+`gomocup15.npz`（50 万局面，Gomocup 引擎棋谱）和 `teacher15.npz`（15 万局面，启发式自博弈）。
+代码在 [github.com/w2Tao/gomoku](https://github.com/w2Tao/gomoku)。
+
 ## 模型
 
 ```

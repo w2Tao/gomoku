@@ -16,6 +16,9 @@ size_categories:
 
 15×15 无禁手五子棋（freestyle，五连及以上获胜）的训练数据集，**504,247 个局面**，每个局面带一枚策略标签和一枚胜负标签。
 
+配套模型：[`w2Tao/gomoku-baseline`](https://huggingface.co/w2Tao/gomoku-baseline)（用这两个文件训练出来的策略网络，对冻结启发式 65.5%）。
+代码：[github.com/w2Tao/gomoku](https://github.com/w2Tao/gomoku)。
+
 ## 内容
 
 | 文件 | 大小 | 内容 |

@@ -200,6 +200,11 @@
 `ckpt/baseline/`：来自 `runs/t2_finetune` step 8000，185,724 参数，
 `model_type: value_policy`，推理 = 策略头 argmax、无搜索，对启发式 65.5%。
 
+已发布到 Hugging Face：模型 [`w2Tao/gomoku-baseline`](https://huggingface.co/w2Tao/gomoku-baseline)，
+数据 [`w2Tao/gomoku-15x15`](https://huggingface.co/datasets/w2Tao/gomoku-15x15)。
+四个文件（`model.pt`、`manifest.json`、`gomocup15.npz`、`teacher15.npz`）上传后都做过
+SHA-256 往返校验，与本地逐字节一致。
+
 ---
 
 ## 8. 已废弃的路线
