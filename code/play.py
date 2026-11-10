@@ -506,9 +506,198 @@ class PolicyAgent:
         return max(legal, key=lambda c: float(logits[c]))
 
 
+class HybridAgent:
+    """The heuristic's tactical ladder in front of the learned policy.
+
+    Each half does what the other cannot. VCF and double-three detection are exact
+    -- they prove a win or stay silent -- and the policy net misses them entirely.
+    In quiet positions the heuristic falls back on a crude window score, while the
+    policy was trained on what strong engines actually played.
+
+    Order is deliberate: an exact fact beats any evaluation, so the ladder runs
+    first and the policy only decides where no forcing line exists.
+    """
+
+    def __init__(self, net, dev="cpu", vcf_depth: int = 7, double_three: bool = True):
+        self.net = net
+        self.dev = dev
+        self.vcf_depth = vcf_depth
+        self.double_three = double_three
+        self.policy = PolicyAgent(net, dev)
+        self.last_source = None
+
+    def move(self, my, their, last, rng):
+        occ = my | their
+        legal = [c for c in range(CELLS) if not (occ >> c) & 1]
+        if not legal:
+            return None
+
+        for c in legal:                              # 1. make five
+            if has_five(my | (1 << c)):
+                self.last_source = "five"
+                return c
+        for c in legal:                              # 2. block five
+            if has_five(their | (1 << c)):
+                self.last_source = "block"
+                return c
+
+        m = vcf_move(my, their, self.vcf_depth)      # 3. VCF attack
+        if m is not None:
+            self.last_source = "vcf"
+            return m
+        m = vcf_move(their, my, self.vcf_depth)      # 4. VCF defence
+        if m is not None:
+            self.last_source = "vcf_def"
+            return m
+
+        if self.double_three:
+            scored = sorted(((self.policy.last_logits[c] if
+                              self.policy.last_logits is not None else 0.0, c)
+                             for c in legal))
+            order = [c for _, c in reversed(scored)]
+            for c in order[:8]:                      # 5. my double three
+                if creates_double_three(my, their, c):
+                    self.last_source = "double_three"
+                    return c
+            for c in order[:8]:                      # 6. block theirs
+                if creates_double_three(their, my, c):
+                    self.last_source = "block_dt"
+                    return c
+
+        self.last_source = "policy"                  # 7. learned policy
+        return self.policy.move(my, their, last, rng)
+
+
 def load_policy_net(path, dev="cpu"):
     ck = torch.load(path, map_location=dev, weights_only=False)
     net = ValuePolicyNet(**ck["config"]).to(dev)
     net.load_state_dict(ck["state_dict"])
     net.eval()
     return net, ck
+
+
+class PolicySearchAgent:
+    """Negamax to a fixed depth, narrowed by the policy, evaluated by the value head.
+
+    This is the "real search" answer to a 1-ply agent that lost 23.5 points: taking
+    argmax of -V(child) over every legal cell makes one value error decisive for
+    every candidate. Here the opponent gets a reply, the candidate set is ordered
+    and pruned by the policy prior (which is the head trained on engine moves), and
+    the value head only has to score a handful of positions per move.
+
+    Depth 2 means: my move, their best reply, and I take the value of the resulting
+    position. `width` and `replies` control how much of the tree survives the prior.
+
+    The tactical layer stays: an immediate five is played, an immediate threat is
+    blocked, because no evaluation beats an exact fact.
+    """
+
+    def __init__(self, net, dev="cpu", width=12, replies=8):
+        self.net = net
+        self.dev = dev
+        self.width = width
+        self.replies = replies
+        self.last_q = None
+
+    @torch.no_grad()
+    def _forward(self, planes):
+        out = self.net(torch.from_numpy(planes).to(self.dev))
+        if isinstance(out, tuple):
+            v, p = out
+        else:
+            v, p = out, None
+        v = torch.softmax(v, 1)
+        value = (v[:, 2] - v[:, 0]).cpu().numpy()
+        pol = None if p is None else p.cpu().numpy()
+        return value, pol
+
+    @staticmethod
+    def _planes(own, opp, last_cells):
+        own = np.atleast_2d(np.asarray(own, dtype=np.float32))
+        opp = np.atleast_2d(np.asarray(opp, dtype=np.float32))
+        n = own.shape[0]
+        x = np.zeros((n, 3, H, W), dtype=np.float32)
+        x[:, 0] = own.reshape(n, H, W)
+        x[:, 1] = opp.reshape(n, H, W)
+        for i, c in enumerate(last_cells):
+            if c >= 0:
+                x[i, 2].flat[c] = 1.0
+        return x
+
+    def move(self, my, their, last, rng):
+        occ = my | their
+        legal = [c for c in range(CELLS) if not (occ >> c) & 1]
+        if not legal:
+            return None
+
+        # exact facts first
+        for c in legal:
+            if has_five(my | (1 << c)):
+                return c
+        for c in legal:
+            if has_five(their | (1 << c)):
+                return c
+
+        own_p = bb_to_plane(my)
+        opp_p = bb_to_plane(their)
+        _, pol = self._forward(self._planes(own_p, opp_p, [last]))
+        if pol is None:
+            return rng.choice(legal)
+        pol = pol[0]
+
+        mine = sorted(legal, key=lambda c: -float(pol[c]))[:self.width]
+        oh = np.zeros((1, CELLS), dtype=np.float32)
+        roots = []
+        for c in mine:
+            oh[0, c] = 1.0
+            roots.append((own_p + oh[0], opp_p, c))
+            oh[0, c] = 0.0
+
+        # their replies, one batched forward per root position
+        own_r = np.stack([r[0] for r in roots])
+        opp_r = np.stack([r[1] for r in roots])
+        last_r = np.array([r[2] for r in roots])
+        _, rpol = self._forward(self._planes(own_r, opp_r, last_r))
+
+        child_own, child_opp, child_last, owner = [], [], [], []
+        for i, c in enumerate(mine):
+            occ2 = occ | (1 << c)
+            reply_legal = [x for x in range(CELLS) if not (occ2 >> x) & 1]
+            if not reply_legal:
+                continue
+            if rpol is not None:
+                order = sorted(reply_legal, key=lambda x: -float(rpol[i][x]))
+            else:
+                order = reply_legal
+            for x in order[:self.replies]:
+                # grandchild, canonical for me to move:
+                #   own = my stones including c   opp = their stones including x
+                own_g = own_r[i].copy()
+                opp_g = opp_r[i].copy()
+                opp_g[x] = 1.0
+                child_own.append(own_g)
+                child_opp.append(opp_g)
+                child_last.append(x)
+                owner.append(i)
+
+        if not child_own:
+            return mine[0]
+
+        n = len(owner)
+        planes = np.zeros((n, 3, H, W), dtype=np.float32)
+        planes[:, 0] = np.stack(child_own).reshape(n, H, W)
+        planes[:, 1] = np.stack(child_opp).reshape(n, H, W)
+        for k, c in enumerate(child_last):
+            planes[k, 2].flat[c] = 1.0
+        value, _ = self._forward(planes)
+
+        q = np.full(len(mine), 1.0, dtype=np.float32)
+        seen = np.zeros(len(mine), dtype=bool)
+        for k, i in enumerate(owner):
+            if not seen[i]:
+                q[i] = value[k]
+                seen[i] = True
+            else:
+                q[i] = min(q[i], value[k])
+        self.last_q = q
+        return mine[int(np.argmax(q))]
