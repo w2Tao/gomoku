@@ -113,6 +113,43 @@ class ValuePolicyNet(ValueNet):
         return torch.softmax(value, dim=1)
 
 
+class ValueQNet(ValuePolicyNet):
+    """Adds a per-move win probability on top of the shared trunk.
+
+    The value head answers one question per position -- "am I winning" -- and that
+    proved too coarse to rank ~150 candidate moves: both 1-ply and 2-ply search
+    over it lost to the plain policy head. This head answers the question directly,
+    one number per cell: if I play here, do I win.
+
+    The target is the game outcome at the cell that was actually played, so the
+    label is sparse (one cell per position). The policy head next door is what makes
+    that workable -- sharing a trunk with a densely supervised head keeps the
+    per-cell embedding meaningful, so the sparse signal has something to shape.
+
+    `forward` returns (value_logits, policy_logits, q). `q` is an unbounded score
+    per cell in [-1, 1]: no softmax, only masking of occupied cells before argmax.
+    """
+
+    has_q = True
+
+    def __init__(self, channels: int = 48, blocks: int = 4,
+                 head_channels: int = 24, n_classes: int = N_CLASSES):
+        super().__init__(channels, blocks, head_channels, n_classes)
+        self.q_conv = nn.Conv2d(channels, 1, 1, bias=False)
+        self.q_bias = nn.Parameter(torch.zeros(CELLS))
+
+    def forward(self, x):
+        trunk = self.body(self.stem(x))
+        value = self.head(trunk)
+        policy = self.policy_conv(trunk).flatten(1) + self.policy_bias
+        q = self.q_conv(trunk).flatten(1) + self.q_bias
+        return value, policy, q
+
+    def predict_proba(self, x):
+        value, _, _ = self.forward(x)
+        return torch.softmax(value, dim=1)
+
+
 # ---------------------------------------------------------------------------
 def describe(model: ValueNet) -> None:
     """Layer-by-layer shapes and parameter counts."""

@@ -25,7 +25,7 @@ import torch.nn.functional as F
 import paths
 from dataset import DIHEDRAL, load, to_planes
 from engine import CELLS, H, W
-from model import N_CLASSES, ValuePolicyNet
+from model import N_CLASSES, ValuePolicyNet, ValueQNet
 
 PERMS = torch.tensor(np.stack(DIHEDRAL), dtype=torch.long)      # perm[dest] = src
 INV = []
@@ -68,20 +68,37 @@ def legal_mask(x):
 def evaluate(net, X, VT, VW, MV, bs=1024):
     net.eval()
     vls, pls, correct, total = [], [], 0, 0
+    qls, qok = [], 0
     for i in range(0, X.shape[0], bs):
         xb = X[i:i + bs]
-        v, p = net(xb)
+        out = net(xb)
+        if len(out) == 3:
+            v, p, q = out
+        else:
+            (v, p), q = out, None
         lv = -(VT[i:i + bs] * F.log_softmax(v, 1)).sum(1)
         vls.append((lv * VW[i:i + bs]).sum().item())
         m = legal_mask(xb)
         pm = p.masked_fill(~m, -1e9)
         pls.append(F.cross_entropy(pm, MV[i:i + bs]).item() * xb.shape[0])
         correct += (pm.argmax(1) == MV[i:i + bs]).sum().item()
+        if q is not None:
+            tv = VT[i:i + bs]
+            target = tv[:, 2] - tv[:, 0]
+            picked = q.gather(1, MV[i:i + bs].unsqueeze(1)).squeeze(1)
+            qls.append(F.mse_loss(picked, target).item() * xb.shape[0])
+            # does the head rank the played move first, over legal cells?
+            qm = q.masked_fill(~m, -1e9)
+            qok += (qm.argmax(1) == MV[i:i + bs]).sum().item()
         total += xb.shape[0]
     net.train()
     n = X.shape[0]
-    return dict(value_loss=sum(vls) / n, policy_loss=sum(pls) / n,
-                policy_acc=correct / total)
+    out = dict(value_loss=sum(vls) / n, policy_loss=sum(pls) / n,
+               policy_acc=correct / total)
+    if qls:
+        out["q_loss"] = sum(qls) / n
+        out["q_acc"] = qok / total
+    return out
 
 
 def main():
@@ -93,6 +110,8 @@ def main():
     ap.add_argument("--lr", type=float, default=5e-4)
     ap.add_argument("--wd", type=float, default=1e-4)
     ap.add_argument("--lam", type=float, default=1.0, help="policy loss weight")
+    ap.add_argument("--q-weight", type=float, default=0.0,
+                    help="above 0 trains a per-move win head, model becomes ValueQNet")
     ap.add_argument("--channels", type=int, default=48)
     ap.add_argument("--blocks", type=int, default=4)
     ap.add_argument("--head-channels", type=int, default=24)
@@ -113,7 +132,8 @@ def main():
     Xv, VTv, VWv, MVv = (d["x"][~tr].to(dev), d["vt"][~tr].to(dev),
                          d["vw"][~tr].to(dev), d["mv"][~tr].to(dev))
 
-    net = ValuePolicyNet(args.channels, args.blocks, args.head_channels).to(dev)
+    net_cls = ValueQNet if args.q_weight > 0 else ValuePolicyNet
+    net = net_cls(args.channels, args.blocks, args.head_channels).to(dev)
     warm = ""
     if args.warm and os.path.isfile(args.warm):
         ck = torch.load(args.warm, map_location=dev, weights_only=False)
@@ -145,12 +165,25 @@ def main():
     for step in range(args.steps):
         idx = torch.randint(0, n_tr, (args.batch,), device=dev)
         xb, mb = augment(X[idx], MV[idx], dev)
-        v, p = net(xb)
+        out = net(xb)
+        if len(out) == 3:
+            v, p, q = out
+        else:
+            (v, p), q = out, None
         lv = -(VT[idx] * F.log_softmax(v, 1)).sum(1)
         lv = (lv * VW[idx]).mean()
         pm = p.masked_fill(~legal_mask(xb), -1e9)
         lp = F.cross_entropy(pm, mb)
         loss = lv + args.lam * lp
+        if q is not None and args.q_weight > 0:
+            # outcome at the cell that was actually played: +1 win, -1 loss, 0 draw
+            tv = VT[idx]
+            target = tv[:, 2] - tv[:, 0]
+            picked = q.gather(1, mb.unsqueeze(1)).squeeze(1)
+            lq = F.mse_loss(picked, target)
+            loss = loss + args.q_weight * lq
+        else:
+            lq = torch.zeros((), device=dev)
         opt.zero_grad(set_to_none=True)
         loss.backward()
         opt.step()
@@ -160,7 +193,7 @@ def main():
             m = evaluate(net, Xv, VTv, VWv, MVv)
             m.update(step=step + 1, train_loss=loss.item(),
                      train_value=lv.item(), train_policy=lp.item(),
-                     secs=round(time.time() - t0, 1))
+                     train_q=float(lq.detach()), secs=round(time.time() - t0, 1))
             hist.append(m)
             star = ""
             if m["value_loss"] + args.lam * m["policy_loss"] < best:
