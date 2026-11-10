@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 数据集：由 code/build_*.py 重新生成，常见体积几百 MB
+data/*.npz
+data/*.npy
+data/selfplay/
+data/_shard_*.npz
+
+# 模型快照：数据 + 一条训练命令即可复现
+ckpt/**/model.pt
+ckpt/**/best.pt
+ckpt/**/*.pt
+
+# 基线的 manifest 保留在 git 里（它是"跑过什么"的记录），但权重不提交。
+# 如果连 manifest 也不想提交，把下一行的注释去掉。
+# ckpt/**/manifest.json
+
+# 编辑器 / 操作系统
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+*.log

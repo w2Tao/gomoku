@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>五子棋 15×15 · 人机对弈</title>
+<style>
+  :root{
+    --bg:#0e1014; --panel:#161a21; --line:#262c36;
+    --text:#e7eaf0; --muted:#8b94a3; --accent:#5b9dff;
+    --wood:#dcb978; --grid:#8a6a3b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);
+       font:14px/1.5 system-ui,"Segoe UI","Microsoft YaHei",sans-serif;
+       display:flex;align-items:center;justify-content:center;padding:24px}
+  .app{display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap;
+       justify-content:center}
+  .panel{width:300px;background:var(--panel);border:1px solid var(--line);
+         border-radius:12px;padding:18px}
+  h1{margin:0 0 4px;font-size:17px;font-weight:600}
+  .sub{color:var(--muted);font-size:12px;margin-bottom:16px}
+  .field{margin-bottom:12px}
+  .field label{display:block;color:var(--muted);font-size:12px;margin-bottom:5px}
+  select{width:100%;background:#0f1319;color:var(--text);border:1px solid var(--line);
+         border-radius:7px;padding:8px 9px;font-size:13px}
+  button{width:100%;background:var(--accent);color:#06101f;border:0;border-radius:8px;
+         padding:10px;font-size:13px;font-weight:600;cursor:pointer;margin-top:6px}
+  button:hover{filter:brightness(1.08)}
+  button.ghost{background:transparent;color:var(--muted);border:1px solid var(--line);
+               font-weight:500}
+  #status{margin-top:16px;padding:10px 12px;border-radius:8px;background:#0f1319;
+          border:1px solid var(--line);font-size:13px;min-height:42px}
+  #status.win{color:#5fd48a} #status.lose{color:#ff7b7b}
+  #status.think{color:var(--accent)}
+  #log{margin-top:10px;color:var(--muted);font-size:12px;line-height:1.7;
+       word-break:break-all;max-height:150px;overflow:auto}
+  .boardWrap{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+             padding:14px}
+  #board{display:grid;grid-template-columns:repeat(15,38px);grid-template-rows:repeat(15,38px);
+         padding:12px;border-radius:8px;background:var(--wood);
+         background-image:
+           repeating-linear-gradient(to right,transparent 0 37px,var(--grid) 37px 38px),
+           repeating-linear-gradient(to bottom,transparent 0 37px,var(--grid) 37px 38px);
+         background-size:38px 38px;box-shadow:0 8px 28px rgba(0,0,0,.45)}
+  .cell{position:relative;width:38px;height:38px;cursor:default}
+  #board[data-turn="human"] .cell:not(.occupied){cursor:pointer}
+  .stone{position:absolute;left:50%;top:50%;width:30px;height:30px;border-radius:50%;
+         transform:translate(-50%,-50%);pointer-events:none}
+  .black{background:radial-gradient(circle at 34% 28%,#6d7686,#0a0d12 72%);
+         box-shadow:0 2px 5px rgba(0,0,0,.5)}
+  .white{background:radial-gradient(circle at 34% 28%,#ffffff,#c3c9d3 76%);
+         box-shadow:0 2px 5px rgba(0,0,0,.35)}
+  .last::after{content:"";position:absolute;left:50%;top:50%;width:9px;height:9px;
+               border-radius:50%;background:#ff5252;transform:translate(-50%,-50%);
+               box-shadow:0 0 0 2px rgba(255,82,82,.25)}
+  .ghost{position:absolute;left:50%;top:50%;width:30px;height:30px;border-radius:50%;
+         transform:translate(-50%,-50%);opacity:0;pointer-events:none}
+  #board[data-turn="human"] .cell:not(.occupied):hover .ghost{opacity:.35}
+  #board[data-human="black"] .ghost{background:#0a0d12}
+  #board[data-human="white"] .ghost{background:#ffffff}
+  .hint{color:var(--muted);font-size:12px;margin-top:10px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="boardWrap">
+    <div id="board" data-turn="" data-human="black"></div>
+  </div>
+
+  <aside class="panel">
+    <h1>五子棋 15×15</h1>
+    <div class="sub">无禁手 · 五连及以上获胜</div>
+
+    <div class="field">
+      <label>对手模型</label>
+      <select id="model"></select>
+    </div>
+    <div class="field">
+      <label>你执</label>
+      <select id="humanColor">
+        <option value="black">黑（先手）</option>
+        <option value="white">白（后手）</option>
+      </select>
+    </div>
+    <button id="newGame">开始新对局</button>
+    <button id="undo" class="ghost">悔一步</button>
+
+    <div id="status">选择对手后点击「开始新对局」</div>
+    <div id="log"></div>
+    <div class="hint" id="hint"></div>
+  </aside>
+</div>
+
+<script>
+const N = 15, CELLS = N * N;
+const boardEl = document.getElementById('board');
+const statusEl = document.getElementById('status');
+const logEl = document.getElementById('log');
+const hintEl = document.getElementById('hint');
+const modelSel = document.getElementById('model');
+const colorSel = document.getElementById('humanColor');
+
+let S = { moves: [], human: 'black', model: 'baseline0', busy: false,
+          over: false, winner: null, started: false, ms: 0 };
+
+const cells = [];
+for (let i = 0; i < CELLS; i++) {
+  const d = document.createElement('div');
+  d.className = 'cell';
+  d.dataset.i = i;
+  d.innerHTML = '<span class="ghost"></span>';
+  d.addEventListener('click', () => onClick(i));
+  boardEl.appendChild(d);
+  cells.push(d);
+}
+
+function colorOfMove(k) { return k % 2 === 0 ? 'black' : 'white'; }
+function turnName() { return colorOfMove(S.moves.length); }
+function coord(i) {
+  const c = String.fromCharCode(65 + (i % N));
+  const r = N - Math.floor(i / N);
+  return c + r;
+}
+function buildBoard() {
+  const b = new Array(CELLS).fill(0);
+  S.moves.forEach((m, k) => { b[m] = k % 2 === 0 ? 1 : 2; });
+  return b;
+}
+function hasFive(b, player) {
+  const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    if (b[r * N + c] !== player) continue;
+    for (const [dr, dc] of dirs) {
+      let k = 1;
+      while (k < 5) {
+        const rr = r + dr * k, cc = c + dc * k;
+        if (rr < 0 || rr >= N || cc < 0 || cc >= N) break;
+        if (b[rr * N + cc] !== player) break;
+        k++;
+      }
+      if (k >= 5) return true;
+    }
+  }
+  return false;
+}
+
+function render() {
+  const b = buildBoard();
+  const last = S.moves.length ? S.moves[S.moves.length - 1] : -1;
+  cells.forEach((el, i) => {
+    el.querySelectorAll('.stone').forEach(s => s.remove());
+    el.classList.toggle('occupied', b[i] !== 0);
+    el.classList.toggle('last', i === last && b[i] !== 0);
+    if (b[i] !== 0) {
+      const s = document.createElement('span');
+      s.className = 'stone ' + (b[i] === 1 ? 'black' : 'white');
+      el.appendChild(s);
+    }
+  });
+  const humanTurn = !S.over && !S.busy && S.started && turnName() === S.human;
+  boardEl.dataset.turn = humanTurn ? 'human' : '';
+  boardEl.dataset.human = S.human;
+
+  let txt = '', cls = '';
+  if (!S.started) txt = '选择对手后点击「开始新对局」';
+  else if (S.over) {
+    if (S.winner === null) {
+      txt = '平局';
+    } else {
+      const winnerColor = S.winner === 0 ? 'black' : 'white';
+      txt = winnerColor === S.human ? '你赢了 🎉' : '模型获胜';
+      cls = winnerColor === S.human ? 'win' : 'lose';
+    }
+  } else if (S.busy) { txt = '模型思考中…'; cls = 'think'; }
+  else if (turnName() === S.human) txt = `轮到你了（${S.human === 'black' ? '黑' : '白'}）`;
+  else txt = '等待模型…';
+  statusEl.textContent = txt;
+  statusEl.className = cls;
+
+  logEl.textContent = S.moves.map((m, k) =>
+    (k % 2 === 0 ? '●' : '○') + coord(m)).join('  ');
+  if (S.ms) hintEl.textContent = `上次思考耗时 ${S.ms.toFixed(0)} ms`;
+}
+
+async function newGame() {
+  S = { moves: [], human: colorSel.value, model: modelSel.value, busy: false,
+        over: false, winner: null, started: true, ms: 0 };
+  render();
+  // if the human is white, the model opens
+  if (S.human === 'white') await askModel();
+}
+
+async function askModel() {
+  if (!S.started || S.over) return;
+  S.busy = true; render();
+  try {
+    const r = await fetch('/api/play', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ moves: S.moves, model: S.model })
+    });
+    const j = await r.json();
+    if (j.error) throw new Error(j.error);
+    S.moves = j.moves;
+    S.over = j.over;
+    S.winner = j.winner;
+    S.ms = j.ms || 0;
+  } catch (e) {
+    statusEl.textContent = '出错：' + e.message;
+    statusEl.className = 'lose';
+    S.busy = false;
+    return;
+  }
+  S.busy = false; render();
+}
+
+function onClick(i) {
+  if (!S.started || S.over || S.busy) return;
+  if (turnName() !== S.human) return;
+  if (S.moves.includes(i)) return;
+  S.moves.push(i);
+  const b = buildBoard();
+  const mine = S.human === 'black' ? 1 : 2;
+  if (hasFive(b, mine)) { S.over = true; S.winner = S.human === 'black' ? 0 : 1; render(); return; }
+  if (S.moves.length >= CELLS) { S.over = true; S.winner = null; render(); return; }
+  render();
+  askModel();
+}
+
+function undo() {
+  if (!S.started || S.busy) return;
+  const drop = Math.min(2, S.moves.length);
+  S.moves = S.moves.slice(0, S.moves.length - drop);
+  S.over = false; S.winner = null; render();
+}
+
+document.getElementById('newGame').addEventListener('click', newGame);
+document.getElementById('undo').addEventListener('click', undo);
+modelSel.addEventListener('change', () => { if (S.started) newGame(); });
+
+(async function init() {
+  try {
+    const r = await fetch('/api/models');
+    const j = await r.json();
+    modelSel.innerHTML = j.models.map(m =>
+      `<option value="${m.id}">${m.label}</option>`).join('');
+    modelSel.value = j.default;
+    S.model = j.default;
+    hintEl.textContent = '服务端：' + (j.device || 'cpu');
+  } catch (e) {
+    statusEl.textContent = '无法连接服务端';
+  }
+  render();
+})();
+</script>
+</body>
+</html>
