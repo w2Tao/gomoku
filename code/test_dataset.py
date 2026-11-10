@@ -6,6 +6,8 @@ converges to something plausible-looking. So every transform is checked against
 an independent path (the Python-int bitboards, or the engine's own predicates).
 """
 
+import os
+
 import paths
 import numpy as np
 
@@ -22,7 +24,6 @@ from value_target import DIHEDRAL8, apply_perm
 
 
 def main():
-    import os
     if not os.path.isfile(paths.data("_smoke.npz")):
         print("SKIP: data/_smoke.npz missing -- regenerate a dataset first "
               "(python code/build_dataset.py --target 3000 --out _smoke.npz)")

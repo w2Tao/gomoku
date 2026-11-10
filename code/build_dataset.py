@@ -22,6 +22,7 @@ import paths
 
 import argparse
 import json
+import os
 import random
 import time
 
@@ -153,7 +154,6 @@ def main():
             "seconds": round(dt, 1),
         })),
     }
-    import os
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     np.savez_compressed(args.out, **out)
 
