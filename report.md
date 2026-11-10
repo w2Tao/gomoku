@@ -202,8 +202,6 @@
 
 已发布到 Hugging Face：模型 [`w2Tao/gomoku-baseline`](https://huggingface.co/w2Tao/gomoku-baseline)，
 数据 [`w2Tao/gomoku-15x15`](https://huggingface.co/datasets/w2Tao/gomoku-15x15)。
-四个文件（`model.pt`、`manifest.json`、`gomocup15.npz`、`teacher15.npz`）上传后都做过
-SHA-256 往返校验，与本地逐字节一致。
 
 ---
 

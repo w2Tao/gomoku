@@ -39,7 +39,7 @@ gomoku/
     train.py            价值网络训练
     train_policy.py     价值 + 策略训练
     freeze_baseline.py  把 checkpoint 冻结成不可变基线
-    push_hf.py          发布到 Hugging Face（--dry-run 可离线看清单）
+    push_hf.py          发布到 Hugging Face
     baseline_duel.py    基线 vs 外部对手，配对赛
     eval_three.py       多个模型互相打，逐对给分
     bench_solver.py     VCF / 威胁检测的基准
@@ -108,19 +108,16 @@ python code/eval_three.py 100
 
 ## 已发布
 
-模型和数据集都在 Hugging Face 上，公开可下载：
+模型和数据集已发布到 Hugging Face，可以直接下载使用：
 
 | 仓库 | 内容 |
 |---|---|
-| [`w2Tao/gomoku-baseline`](https://huggingface.co/w2Tao/gomoku-baseline) | 完整权重 `model.pt`（0.76 MB，value + policy 双头）、`manifest.json` |
-| [`w2Tao/gomoku-15x15`](https://huggingface.co/datasets/w2Tao/gomoku-15x15) | `gomocup15.npz`（50 万局面）、`teacher15.npz`（15 万局面） |
+| [`gomoku-baseline`](https://huggingface.co/w2Tao/gomoku-baseline) | 冻结基线的完整权重（value + policy 双头，185,724 参数）与身份卡 |
+| [`gomoku-15x15`](https://huggingface.co/datasets/w2Tao/gomoku-15x15) | `gomocup15.npz`（50 万局面）、`teacher15.npz`（15 万局面） |
 
-发布用 `python code/push_hf.py --user w2Tao`，需要先 `hf auth login`；提交前建议先跑 `--dry-run`。
-两份仓库的 README 卡片分别写在 `hf/model/README.md` 和 `hf/dataset/README.md`，改卡片后重跑一次即可更新。
-上传后会做 SHA-256 往返校验，确认 Hub 上的字节与本地一致。
+两个仓库的说明卡片分别在 `hf/model/README.md` 和 `hf/dataset/README.md`。
 
 ## 文档
 
 * [`manual.md`](manual.md) —— 原理、方法学、失败原因和 bug 目录，**不含具体数字**。
 * [`report.md`](report.md) —— 所有测量数值（速度、覆盖率、消融、训练对比），每个数字都带出处。
-* [`AGENT.md`](AGENT.md) —— 本仓库的协作约定，包括怎么验证改动、以及哪些测量不可信。

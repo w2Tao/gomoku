@@ -42,3 +42,7 @@ hf/_stage_dataset/
 
 # Hugging Face download cache (sandbox-friendly location)
 .hf_cache/
+
+# Operator notes: personal accounts, publish workflow, local sandbox quirks.
+# Not part of the published project; the other docs do not reference it.
+AGENT.md
