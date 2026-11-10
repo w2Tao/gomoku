@@ -75,6 +75,25 @@ gomoku/
 * 每个局面都以**规范形式**存储：我方棋子、对方棋子、对手最后一手。颜色根本不出现在表示里，所以整条管道**没有任何翻号的地方**。
 * 棋盘以 `(N, 4)` uint64 打包（225 位装不进两个 64 位字）。
 
+## 外部标尺
+
+我们对自己的所有「更强」都是相对本仓库的冻结启发式说的，那个坐标没有外部意义。Gomocup 的参赛引擎来自别的作者，强得多——它们是唯一能回答「我们到底什么水平」的东西。
+
+```bash
+# 下载一个引擎到 data/engines/（约 6 MB）
+python code/fetch_engines.py EMBRYO26
+python code/fetch_engines.py --list
+
+# 打一场：默认 500 ms/步，颜色交替
+python code/duel_engine.py EMBRYO26 baseline 20 --time-ms 300
+```
+
+引擎通过 pbrain 协议（stdin/stdout 文本）驱动：`START 15` → `OK` → `INFO timeout_turn <ms>` → `BEGIN` → 每次对手落子发 `TURN x,y`，读回它的坐标。
+
+两个实现细节值得知道：`INFO` **必须**等 `START` 返回 `OK` 之后再发，否则被丢弃、引擎按自己的默认时限思考（EMBRYO 会每步想 20 秒）；引擎超过 10 秒没有任何输出就判定卡死并杀掉，下一局重启进程——复用同一个进程会让上一局的残留输出串进下一局。
+
+> 已知问题：部分引擎（TITO14）在长对局中会出现棋盘状态分歧，表现为 `engine returned an illegal cell`，这类对局会被中止并计入统计。EMBRYO26 目前最稳定。
+
 ## 管道
 
 ```bash

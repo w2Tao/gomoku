@@ -1,0 +1,151 @@
+"""Play our agent against a Gomocup engine: the external yardstick.
+
+The engines here are written by other people and are far stronger than anything in
+this repository. The point is a fixed external coordinate system, not a fair fight.
+
+    python code/fetch_engines.py EMBRYO26
+    python code/duel_engine.py EMBRYO26 baseline 20 --time-ms 300
+
+Games start from an empty board and use only `BEGIN` / `TURN`. `BOARD` is avoided
+on purpose: its semantics differ between engines and the resulting board diverged
+from the engine's own, producing "opponent's move [...]" errors. Opening variety
+comes from our side instead -- our agent plays `--opening` random moves before it
+starts thinking. Colour alternates every game, so the randomisation applies
+equally to both colours.
+"""
+from __future__ import annotations
+
+import argparse
+import os
+import random
+import sys
+
+import baselines
+from engine import CELLS, has_five
+from fetch_engines import ENGINE
+from play import PolicyAgent
+from pbrain import EngineError, Pbrain, find_exe
+
+
+def play_game(engine, our_agent, rng, timeout, engine_black, opening):
+    """-> 0 if our agent won, 1 if the engine won, None for a draw."""
+    our_colour = 1 if engine_black else 0
+    engine_colour = 1 - our_colour
+    bb = [0, 0]
+    last = -1
+    random_left = opening
+
+    mv = engine.begin(engine_black)
+    turn = 0
+
+    for _ in range(CELLS):
+        occ = bb[0] | bb[1]
+        legal = [c for c in range(CELLS) if not (occ >> c) & 1]
+        if not legal:
+            return None
+
+        if turn == engine_colour:
+            if mv is None:
+                raise EngineError("engine owed a move but sent nothing")
+            x, y = mv
+            cell = (y - 1) * 15 + (x - 1)
+            if not (0 <= cell < CELLS) or (occ >> cell) & 1:
+                raise EngineError(f"engine returned an illegal cell {(x, y)}")
+        elif random_left > 0:
+            cell = rng.choice(legal)
+            random_left -= 1
+        else:
+            cell = our_agent.move(bb[turn], bb[turn ^ 1], last, rng)
+            if cell is None:
+                return None
+
+        bb[turn] |= 1 << cell
+        last = cell
+        if has_five(bb[turn]):
+            return 0 if turn == our_colour else 1
+        turn ^= 1
+        if turn == engine_colour:
+            mv = engine.play(last % 15 + 1, last // 15 + 1, timeout)
+    return None
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("engine")
+    ap.add_argument("baseline", nargs="?", default="baseline")
+    ap.add_argument("games", nargs="?", type=int, default=40)
+    ap.add_argument("--prefer", default=None, help="substring of the exe to use")
+    ap.add_argument("--time-ms", type=int, default=500, help="per move")
+    ap.add_argument("--stall-s", type=float, default=10.0,
+                    help="kill the engine after this long with no output")
+    ap.add_argument("--opening", type=int, default=2,
+                    help="random moves our agent plays before thinking")
+    ap.add_argument("--verbose", action="store_true")
+    args = ap.parse_args()
+
+    prefer = args.prefer or ENGINE().get(args.engine, {}).get("prefer")
+    exe = find_exe(os.path.join("data", "engines", args.engine), prefer)
+    print(f"engine   : {os.path.basename(exe)}  ({args.time_ms} ms/move)")
+
+    import torch
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    net, manifest = baselines.load_baseline(args.baseline, dev)
+    agent = PolicyAgent(net, dev)
+    print(f"opponent : {args.baseline}  "
+          f"({manifest['model_type']}, {manifest['parameters']:,} params)")
+    print(f"{args.games} games, colours alternating, "
+          f"{args.opening} random opening moves from us\n", flush=True)
+
+    rng = random.Random(7)
+    wins = losses = draws = errors = 0
+    eng = Pbrain(exe, time_ms=args.time_ms, verbose=args.verbose,
+                 stall_s=args.stall_s)
+    for i in range(args.games):
+        engine_black = i % 2 == 1
+        try:
+            # A fresh process per game. Reusing one leaks stale output into the
+            # next game -- the engine keeps talking after the game ends, and the
+            # next `begin()` then reads a leftover coordinate as its own move.
+            eng.start()
+            r = play_game(eng, agent, rng, args.time_ms * 10, engine_black,
+                          args.opening)
+        except EngineError as e:
+            errors += 1
+            print(f"  game {i + 1} "
+                  f"({'engine black' if engine_black else 'engine white'}): {e}",
+                  flush=True)
+            continue
+        finally:
+            try:
+                eng.close()
+            except Exception:
+                pass
+        if r is None:
+            draws += 1
+        elif r == 0:
+            wins += 1
+        else:
+            losses += 1
+        done = wins + losses + draws
+        if done and done % 5 == 0:
+            print(f"  {done:>3} games  win {wins/done:5.1%}  "
+                  f"loss {losses/done:5.1%}", flush=True)
+    eng.close()
+
+    done = wins + losses + draws
+    print()
+    if done:
+        p = wins / done
+        se = (0.25 / done) ** 0.5
+        print(f"score vs {args.engine}: {wins}/{done} = {p:.1%}  "
+              f"(loss {losses}, draw {draws})")
+        print(f"  95% interval {max(0, p-1.96*se):.1%} .. {min(1, p+1.96*se):.1%}")
+    else:
+        print("no games completed")
+    if errors:
+        print(f"  {errors} games aborted by engine errors")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
