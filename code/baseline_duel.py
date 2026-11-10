@@ -23,7 +23,7 @@ from play import GreedyPlusAgent, HeuristicAgent, SearchAgent
 
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 150
 OPENING = 4
-IDS = sys.argv[2].split(",") if len(sys.argv) > 2 else ["baseline2"]
+IDS = sys.argv[2].split(",") if len(sys.argv) > 2 else ["baseline"]
 
 
 def make_openings(k, opening, seed=99):

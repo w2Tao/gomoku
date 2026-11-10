@@ -1,4 +1,4 @@
-"""Value network for 9x9 freestyle gomoku.
+"""Value network for 15x15 freestyle gomoku.
 
 Input  : (N, 3, 9, 9) float32
          plane 0 = own stones, plane 1 = opponent stones, plane 2 = the
@@ -123,14 +123,14 @@ def describe(model: ValueNet) -> None:
         n = sum(p.numel() for p in mod.parameters())
         rows.append((name, shape, n))
 
-    add("stem conv 3x3", model.stem[0], f"{IN_CHANNELS}->{cfg['channels']} 9x9")
-    add("stem bn", model.stem[1], f"{cfg['channels']} 9x9")
+    add("stem conv 3x3", model.stem[0], f"{IN_CHANNELS}->{cfg['channels']} {W}x{H}")
+    add("stem bn", model.stem[1], f"{cfg['channels']} {W}x{H}")
     for i, blk in enumerate(model.body):
-        add(f"block{i} conv 3x3", blk.conv1, f"{cfg['channels']}->{cfg['channels']} 9x9")
+        add(f"block{i} conv 3x3", blk.conv1, f"{cfg['channels']}->{cfg['channels']} {W}x{H}")
         add(f"block{i} bn", blk.bn1, "")
-        add(f"block{i} conv 3x3", blk.conv2, f"{cfg['channels']}->{cfg['channels']} 9x9")
+        add(f"block{i} conv 3x3", blk.conv2, f"{cfg['channels']}->{cfg['channels']} {W}x{H}")
         add(f"block{i} bn", blk.bn2, "")
-    add("head conv 1x1", model.head[0], f"{cfg['channels']}->{cfg['head_channels']} 9x9")
+    add("head conv 1x1", model.head[0], f"{cfg['channels']}->{cfg['head_channels']} {W}x{H}")
     add("head bn", model.head[1], "")
     add("head linear", model.head[4],
         f"{cfg['head_channels']*CELLS}->{cfg['n_classes']}")

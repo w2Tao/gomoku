@@ -1,6 +1,6 @@
 {
-  "id": "baseline2",
-  "name": "baseline2 · 策略网络（启发式蒸馏 + Gomocup 微调）",
+  "id": "baseline",
+  "name": "baseline · 策略网络（启发式蒸馏 + Gomocup 微调）",
   "created": "2026-11-11T00:13:13",
   "model_type": "value_policy",
   "source_run": "t2_finetune",

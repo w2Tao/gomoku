@@ -1,4 +1,4 @@
-"""The value target for 9x9 freestyle gomoku -- executable spec.
+"""The value target for 15x15 freestyle gomoku -- executable spec.
 
 Definition
 ----------
@@ -27,7 +27,7 @@ labels dominate noisy ones:
     search   root value from a deeper search               w = 1.0
     outcome  the single-game result z                      w = 1.0
 
-Measured on 9x9 freestyle: a raw `outcome` label carries ~0.037 bits of
+Measured on 15x15 freestyle: a raw `outcome` label carries ~0.011 bits of
 information (1.0 is the ceiling), ~0.01 bits through the first 20 plies. The
 weight is a prior on top of that, not a substitute for better labels.
 """

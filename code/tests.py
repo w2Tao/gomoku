@@ -1,4 +1,4 @@
-"""Cross-checks for the 9x9 rules engine.
+"""Cross-checks for the 15x15 rules engine.
 
 The point of these tests is narrow but important: if the five-detector or the
 terminal handling is wrong, every downstream value label is silently wrong and

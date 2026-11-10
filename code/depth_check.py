@@ -24,7 +24,7 @@ from play import GreedyPlusAgent, SearchAgent
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 100
 AGG = sys.argv[2] if len(sys.argv) > 2 else "min"
 OPENING = 4
-BID = "baseline2"
+BID = "baseline"
 
 
 def sample_positions(d, n=40, seed=5):

@@ -1,4 +1,4 @@
-"""Local web UI: play 9x9 gomoku against a frozen baseline.
+"""Local web UI: play 15x15 gomoku against a frozen baseline.
 
     python app.py             # from the project root: starts the server and
                               # opens the browser (the normal entry point)
@@ -105,7 +105,7 @@ def status_of(bb, moves):
 
 def handle_play(payload):
     moves = list(payload.get("moves", []))
-    model_id = payload.get("model", "baseline2")
+    model_id = payload.get("model", "baseline")
     bb = replay(moves)
     over, winner = status_of(bb, moves)
     if over:

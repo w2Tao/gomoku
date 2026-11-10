@@ -16,7 +16,7 @@ from dataset import load, to_planes
 from play import load_net
 
 MC = sys.argv[1] if len(sys.argv) > 1 else "gomocup15.npz"
-TAGS = sys.argv[2].split(",") if len(sys.argv) > 2 else ["baseline2"]
+TAGS = sys.argv[2].split(",") if len(sys.argv) > 2 else ["baseline"]
 BANDS = [(0, 14), (15, 29), (30, 44), (45, 59), (60, 74), (75, 224)]
 
 

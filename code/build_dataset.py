@@ -1,4 +1,4 @@
-"""Build solver-labelled value data for 9x9 freestyle gomoku.
+"""Build solver-labelled value data for 15x15 freestyle gomoku.
 
 Pipeline
 --------
@@ -141,7 +141,7 @@ def main():
         "game_id": gids_arr,
         "is_val": split,
         "meta": np.array(json.dumps({
-            "board": "9x9 freestyle gomoku",
+            "board": "15x15 freestyle gomoku",
             "value": "optimal-play win expectancy from the side to move",
             "depth": args.depth,
             "seed": args.seed,

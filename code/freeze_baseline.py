@@ -3,7 +3,7 @@
 A baseline is only useful if it is reproducible: the weights, the architecture,
 the inference recipe and the measured strength all have to travel together.
 
-    python code/freeze_baseline.py --src t2_finetune --id baseline2
+    python code/freeze_baseline.py --src t2_finetune --id baseline
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ import paths
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", default="v3", help="run tag under ckpt/runs/")
-    ap.add_argument("--id", default="baseline2")
+    ap.add_argument("--id", default="baseline")
     ap.add_argument("--name", default=None)
     ap.add_argument("--depth", type=int, default=1)
     ap.add_argument("--vs-greedy", type=float, default=None,

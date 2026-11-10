@@ -1,4 +1,4 @@
-"""9x9 freestyle gomoku (no forbidden moves): exact rules via bitboard.
+"""15x15 freestyle gomoku (no forbidden moves): exact rules via bitboard.
 
 Rules
 -----
@@ -39,7 +39,7 @@ def _windows():
 
 
 WINDOWS = _windows()
-N_WINDOWS = len(WINDOWS)          # 140 on 9x9
+N_WINDOWS = len(WINDOWS)          # 572 on 15x15
 
 
 def _mask_coord(dr, dc):
