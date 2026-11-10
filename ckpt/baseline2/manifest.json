@@ -1,0 +1,35 @@
+{
+  "id": "baseline2",
+  "name": "baseline2 · 策略网络（启发式蒸馏 + Gomocup 微调）",
+  "created": "2026-11-11T00:13:13",
+  "model_type": "value_policy",
+  "source_run": "t2_finetune",
+  "source_checkpoint": "C:\\Users\\Administrator\\Desktop\\dessert\\gomoku\\ckpt\\runs\\t2_finetune\\best.pt",
+  "source_step": 8000,
+  "board": "15x15 freestyle gomoku, no forbidden moves",
+  "architecture": {
+    "channels": 48,
+    "blocks": 4,
+    "head_channels": 24,
+    "n_classes": 3
+  },
+  "parameters": 185724,
+  "training": {
+    "data": "data\\gomocup15.npz",
+    "steps": 8000,
+    "augmentation": "8-fold dihedral, per sample"
+  },
+  "metrics": {
+    "val_loss": null,
+    "vs_heuristic_paired": 0.655
+  },
+  "inference": {
+    "head": "policy",
+    "search": "none",
+    "selection": "argmax over legal cells, deterministic"
+  },
+  "known_limits": [
+    "one forward pass: no VCF, no double-three, no search",
+    "imitation of its label source, so it cannot exceed that source"
+  ]
+}

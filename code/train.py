@@ -119,7 +119,7 @@ def evaluate(model, X, T, W, S, bs=1024):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data", default=paths.data("batch1.npz"))
+    ap.add_argument("--data", default=paths.data("gomocup15.npz"))
     ap.add_argument("--mc", default=None)
     ap.add_argument("--mc-weight", type=float, default=0.5)
     ap.add_argument("--steps", type=int, default=6000)

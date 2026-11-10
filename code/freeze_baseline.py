@@ -3,7 +3,7 @@
 A baseline is only useful if it is reproducible: the weights, the architecture,
 the inference recipe and the measured strength all have to travel together.
 
-    python code/freeze_baseline.py --src v3 --id baseline1
+    python code/freeze_baseline.py --src t2_finetune --id baseline2
 """
 from __future__ import annotations
 
@@ -20,11 +20,11 @@ import paths
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", default="v3", help="run tag under ckpt/runs/")
-    ap.add_argument("--id", default="baseline1")
+    ap.add_argument("--id", default="baseline2")
     ap.add_argument("--name", default=None)
     ap.add_argument("--depth", type=int, default=1)
     ap.add_argument("--vs-greedy", type=float, default=None,
-                    help="measured paired win rate against greedy+, if known")
+                    help="measured paired score against the frozen heuristic, if known")
     args = ap.parse_args()
 
     src_ckpt = paths.run_ckpt(args.src)
@@ -46,40 +46,55 @@ def main():
     os.makedirs(dst, exist_ok=True)
     torch.save(ck, os.path.join(dst, "model.pt"))
 
+    # A `ValuePolicyNet` carries a policy head; play it straight off that head.
+    has_policy = any(k.startswith("policy_") for k in ck["state_dict"])
+    model_type = "value_policy" if has_policy else "value"
+    n_par = metrics.get("params") or sum(
+        v.numel() for v in ck["state_dict"].values())
+
+    if has_policy:
+        recipe = {
+            "head": "policy",
+            "search": "none",
+            "selection": "argmax over legal cells, deterministic",
+        }
+        limits = [
+            "one forward pass: no VCF, no double-three, no search",
+            "imitation of its label source, so it cannot exceed that source",
+        ]
+    else:
+        recipe = {
+            "head": "value",
+            "search_depth_plies": args.depth,
+            "selection": "argmax, deterministic",
+        }
+        limits = [
+            "value is a calibrated-ish score, not a probability",
+            "2-ply search is a net loss at this value accuracy",
+        ]
+
     manifest = {
         "id": args.id,
-        "name": args.name or f"{args.id} · value net + {args.depth}-ply search",
+        "name": args.name or f"{args.id} · {model_type}",
         "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "model_type": model_type,
         "source_run": args.src,
         "source_checkpoint": src_ckpt,
         "source_step": ck.get("step"),
-        "board": "9x9 freestyle gomoku, no forbidden moves",
+        "board": "15x15 freestyle gomoku, no forbidden moves",
         "architecture": ck["config"],
-        "parameters": metrics.get("params"),
+        "parameters": n_par,
         "training": {
-            "solver_labels": info.get("solver"),
-            "rollout_labels": info.get("mc"),
-            "augmentation": "8-fold dihedral, per sample",
+            "data": margs.get("data") or info.get("data"),
             "steps": margs.get("steps"),
-            "rollout_weight": margs.get("mc_weight"),
+            "augmentation": "8-fold dihedral, per sample",
         },
         "metrics": {
-            "solver_balanced_accuracy": best.get("solver_bal"),
-            "rollout_mae": best.get("mc_mae"),
-            "rollout_corr": best.get("mc_corr"),
             "val_loss": best.get("loss"),
-            "vs_greedy_plus_paired": args.vs_greedy,
+            "vs_heuristic_paired": args.vs_greedy,
         },
-        "inference": {
-            "search_depth_plies": args.depth,
-            "selection": "argmax, deterministic",
-            "opening_randomisation": "only for evaluation, not in play",
-        },
-        "known_limits": [
-            "value is a calibrated-ish score, not a probability",
-            "rollout labels are V^pi of the heuristic player, not optimal-play value",
-            "2-ply search is a net loss at this value accuracy",
-        ],
+        "inference": recipe,
+        "known_limits": limits,
     }
     with open(os.path.join(dst, "manifest.json"), "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
@@ -88,8 +103,11 @@ def main():
           f"({os.path.getsize(dst + '/model.pt')/1e6:.2f} MB)")
     print(f"source  : runs/{args.src} @ step {manifest['source_step']}")
     print(f"params  : {manifest['parameters']:,}")
-    print(f"quality : solver bal {best.get('solver_bal')}, "
-          f"rollout MAE {best.get('mc_mae')}, corr {best.get('mc_corr')}")
+    print(f"type    : {model_type}")
+    if best.get("loss") is not None:
+        print(f"val loss: {best.get('loss'):.4f}")
+    if args.vs_greedy is not None:
+        print(f"strength: {args.vs_greedy:.1%} vs the frozen heuristic")
 
 
 if __name__ == "__main__":

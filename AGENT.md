@@ -30,7 +30,11 @@
 | Agent | `play.py`、`baselines.py` | 搜索、各类 agent |
 | 评估 | `paired_eval.py`、`*_duel.py`、`depth_check.py`、`eval_*.py`、`analyze_*.py` | 测量 |
 | 界面 | `server.py`、`web/index.html`、`app.py` | 对弈界面 |
-| 文档 | `README.md`、`manual.md`、`AGENT.md` | 这三份 |
+| 文档 | `README.md`、`manual.md`、`report.md`、`AGENT.md` | 这四份 |
+
+文档分工：`manual.md` 讲**为什么**（原理、方法学、失败原因），**不放具体数字**；
+`report.md` 放**所有数值**，每个数字都要能回答「在什么棋盘上、对什么对手/数据、用什么
+方法测的」。新增测量写进 `report.md`，不要在 `manual.md` 里堆表格。
 
 动 `engine.py` 是**全仓库事件**：先通告，改完之后把所有测试和所有数据构建都重跑一遍。
 

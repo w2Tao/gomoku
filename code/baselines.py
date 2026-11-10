@@ -1,8 +1,13 @@
 """Baseline registry: discover, describe and load frozen checkpoints.
 
-Each baseline is a directory under `baselines/` holding `manifest.json` and
-`model.pt`. Nothing here mutates a baseline -- a frozen baseline stays frozen,
-that is the point of freezing it.
+Each baseline is a directory under `ckpt/` holding `manifest.json` and `model.pt`.
+Nothing here mutates a baseline -- a frozen baseline stays frozen, that is the
+point of freezing it.
+
+Two model types exist. `value` is a `ValueNet`, played through a 1-ply search.
+`value_policy` is a `ValuePolicyNet`, played straight off its policy head. The
+manifest declares which; manifests without the field are treated as `value` so
+old ones keep working.
 """
 from __future__ import annotations
 
@@ -12,7 +17,7 @@ import os
 import torch
 
 import paths
-from model import ValueNet
+from model import ValueNet, ValuePolicyNet
 
 BASE_DIR = str(paths.BASELINES)
 
@@ -33,8 +38,9 @@ def list_baselines() -> list[dict]:
         out.append({
             "id": name,
             "name": m.get("name", name),
+            "model_type": m.get("model_type", "value"),
             "params": m.get("parameters"),
-            "strength_vs_greedy": m.get("metrics", {}).get("vs_greedy_paired_400"),
+            "strength_vs_teacher": m.get("metrics", {}).get("vs_heuristic_paired"),
             "source_step": m.get("source_step"),
             "created": m.get("created"),
             "inference": m.get("inference", {}),
@@ -53,7 +59,8 @@ def load_baseline(bid: str, dev: str = "cpu"):
         manifest = json.load(f)
     ck = torch.load(os.path.join(BASE_DIR, bid, "model.pt"),
                     map_location=dev, weights_only=False)
-    net = ValueNet(**ck["config"]).to(dev)
+    cls = ValuePolicyNet if manifest.get("model_type") == "value_policy" else ValueNet
+    net = cls(**ck["config"]).to(dev)
     net.load_state_dict(ck["state_dict"])
     net.eval()
     _CACHE[key] = (net, manifest)

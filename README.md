@@ -32,20 +32,21 @@ gomoku/
     baselines.py        冻结基线的注册表
     server.py           对弈界面的 HTTP + JSON 接口
     web/index.html      前端（无需构建）
-    build_dataset.py    随机对局 → VCF 标签
-    build_mc_dataset.py 随机对局 → rollout 标签
-    build_policy_dataset.py  把某个 agent 蒸馏成着法目标
-    build_rollout_dataset.py 并行生成 rollout
+    build_dataset.py    随机对局 → VCF 精确标签
+    build_gomocup_dataset.py  Gomocup 棋谱 → 策略 + 胜负标签（当前主力数据）
+    build_teacher_dataset.py  冻结启发式自博弈 → 策略 + 胜负标签
     train.py            价值网络训练
     train_policy.py     价值 + 策略训练
     freeze_baseline.py  把 checkpoint 冻结成不可变基线
-    paired_eval.py、baseline_duel.py、heuristic_duel.py、depth_check.py、
-    eval_heuristic.py、eval_value_by_ply.py、analyze_rollouts.py 等
-  ckpt/                 模型快照（已 git 忽略）
-    <baseline-id>/      model.pt + manifest.json，界面自动发现
-    runs/<tag>/         训练过程的 checkpoint
-  data/                 数据集（已 git 忽略）
-    selfplay/           后续阶段模型对弈产生的数据
+    paired_eval.py、baseline_duel.py、eval_three.py、depth_check.py、
+    eval_value_by_ply.py、bench_solver.py
+  ckpt/                 模型快照
+    <baseline-id>/      model.pt + manifest.json，界面自动发现（manifest 进版本库）
+    runs/<tag>/         训练过程的 checkpoint（已 git 忽略）
+  data/                 数据集
+    gomocup15.npz       50 万局面，已纳入版本库
+    其余                solver 标签、老师数据等，可重新生成（已 git 忽略）
+    gomocup/            340 MB 原始棋谱（已 git 忽略）
 ```
 
 ## 棋盘约定
@@ -59,22 +60,29 @@ gomoku/
 ## 管道
 
 ```bash
-# 1. 在能证明强制胜的地方生成精确标签（15×15 上约 15 局面/秒）
-python code/build_dataset.py --target 5000 --out batch1.npz
+# 1. 导入 Gomocup 棋谱（需要先从 gomocup.org 下载 results.zip 并解压到 data/gomocup/）
+python code/build_gomocup_dataset.py --out gomocup15.npz
 
-# 2. 给 solver 盲区生成 rollout 标签（慢：每局面数秒）
-python code/build_rollout_dataset.py --from-mc1 500 --rollouts 64 --workers 12
+# 2. 生成老师数据（冻结启发式自博弈，12 进程，约 2 分钟）
+python code/build_teacher_dataset.py --positions 150000 --workers 12 --out teacher15.npz
 
-# 3. 训练价值网络
-python code/train.py --data data/batch1.npz --steps 6000 --tag v1
+# 3. 训练策略网络（value + policy 双头）
+python code/train_policy.py --data data/teacher15.npz --steps 8000 --tag t1_teacher
+python code/train_policy.py --data data/gomocup15.npz --steps 8000 \
+       --warm ckpt/runs/t1_teacher/best.pt --tag t2_finetune
 
-# 4. 冻结成基线，然后在界面里和它下
-python code/freeze_baseline.py --src v1 --id baseline0
+# 4. 冻结成基线，界面里就能选它
+python code/freeze_baseline.py --src t2_finetune --id baseline2 --vs-greedy 0.655
+
+# 5. 三组模型对战
+python code/eval_three.py 100
 ```
 
 `--out` 只写文件名时会自动落到 `data/`。
 
 ## 实测数据（15×15）
+
+完整数值见 [`report.md`](report.md)。速查：
 
 | 项目 | 数值 |
 |---|---|
@@ -112,5 +120,6 @@ python code/freeze_baseline.py --src v1 --id baseline0
 
 ## 文档
 
-* [`manual.md`](manual.md) —— 详细原理、实测数据，以及产生这些数据的 bug。
+* [`manual.md`](manual.md) —— 原理、方法学、失败原因和 bug 目录，**不含具体数字**。
+* [`report.md`](report.md) —— 所有测量数值（速度、覆盖率、消融、训练对比），每个数字都带出处。
 * [`AGENT.md`](AGENT.md) —— 本仓库的协作约定，包括怎么验证改动、以及哪些测量不可信。

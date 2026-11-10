@@ -22,7 +22,7 @@ import torch
 import baselines
 import paths
 from engine import CELLS, H, W, has_five
-from play import RandomAgent, SearchAgent, frozen_heuristic
+from play import PolicyAgent, RandomAgent, SearchAgent, frozen_heuristic
 
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("GOMOKU_PORT", "8765"))
@@ -38,13 +38,14 @@ def model_catalogue():
     for b in baselines.list_baselines():
         items.append({
             "id": b["id"],
-            "label": f"{b['name']}  (vs 贪心 {b['strength_vs_greedy']:.0%})"
-                     if b["strength_vs_greedy"] is not None else b["name"],
+            "label": f"{b['name']}  (vs 贪心 {b['strength_vs_teacher']:.0%})"
+                     if b["strength_vs_teacher"] is not None else b["name"],
             "kind": "baseline",
             "detail": {
                 "params": b["params"],
                 "step": b["source_step"],
-                "vs_greedy": b["strength_vs_greedy"],
+                "model_type": b["model_type"],
+                "vs_teacher": b["strength_vs_teacher"],
                 "search_depth": b["inference"].get("search_depth_plies"),
             },
         })
@@ -64,8 +65,11 @@ def get_agent(model_id: str):
     elif model_id == "random":
         a = RandomAgent()
     else:
-        net, _manifest = baselines.load_baseline(model_id, DEV)
-        a = SearchAgent(net, DEV, plies=1)
+        net, manifest = baselines.load_baseline(model_id, DEV)
+        if manifest.get("model_type") == "value_policy":
+            a = PolicyAgent(net, DEV)
+        else:
+            a = SearchAgent(net, DEV, plies=1)
     AGENTS[model_id] = a
     return a
 
@@ -101,7 +105,7 @@ def status_of(bb, moves):
 
 def handle_play(payload):
     moves = list(payload.get("moves", []))
-    model_id = payload.get("model", "baseline0")
+    model_id = payload.get("model", "baseline2")
     bb = replay(moves)
     over, winner = status_of(bb, moves)
     if over:

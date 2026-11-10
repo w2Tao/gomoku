@@ -86,8 +86,8 @@ def evaluate(net, X, VT, VW, MV, bs=1024):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data", default=paths.data("policy1.npz"))
-    ap.add_argument("--warm", default=paths.baseline_dir("baseline0") + "/model.pt")
+    ap.add_argument("--data", default=paths.data("teacher15.npz"))
+    ap.add_argument("--warm", default="", help="optional ValuePolicyNet checkpoint")
     ap.add_argument("--steps", type=int, default=6000)
     ap.add_argument("--batch", type=int, default=256)
     ap.add_argument("--lr", type=float, default=5e-4)

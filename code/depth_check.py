@@ -24,7 +24,7 @@ from play import GreedyPlusAgent, SearchAgent
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 100
 AGG = sys.argv[2] if len(sys.argv) > 2 else "min"
 OPENING = 4
-BID = "baseline1"
+BID = "baseline2"
 
 
 def sample_positions(d, n=40, seed=5):
@@ -98,7 +98,7 @@ def main():
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     net, man = baselines.load_baseline(BID, dev)
     from dataset import bitboards, load
-    d = load(paths.data("mc4.npz"))
+    d = load(paths.data("gomocup15.npz"))
     own, opp = bitboards(d)
     idx = sample_positions(d)
 
