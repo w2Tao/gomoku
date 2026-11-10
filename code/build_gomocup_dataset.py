@@ -72,6 +72,13 @@ def replay(moves):
     return None
 
 
+def onehot(cls_arr):
+    """(N,) class ids -> (N,3) float32 with column order [loss, draw, win]."""
+    out = np.zeros((len(cls_arr), 3), dtype=np.float32)
+    out[np.arange(len(cls_arr)), cls_arr] = 1.0
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="gomocup15.npz")
@@ -85,6 +92,7 @@ def main():
 
     rng = np.random.default_rng(args.seed)
     owns, opps, lasts, plies, gids, clss = [], [], [], [], [], []
+    move_out, vt_out, vw_out = [], [], []
     games = kept = skipped = 0
     ply_hist = {}
 
@@ -116,6 +124,10 @@ def main():
                 plies.append(k)
                 gids.append(gid)
                 clss.append(cls)
+                # policy target: the move the engine actually played here
+                move_out.append((moves[k][1] - 1) * W + (moves[k][0] - 1))
+                vt_out.append(1.0 if cls == 2 else -1.0)
+                vw_out.append(1.0)
                 ply_hist[k] = ply_hist.get(k, 0) + 1
         print(f"  {league}: {len(files)} files", flush=True)
 
@@ -154,6 +166,9 @@ def main():
         cls=cls,
         game_id=gid,
         is_val=is_val,
+        move=np.asarray(move_out, dtype=np.int16),
+        value_target=onehot(np.asarray(clss, dtype=np.uint8)),
+        value_weight=np.asarray(vw_out, dtype=np.float32),
         meta=np.array(json.dumps(meta)),
     )
     print(f"\nsaved -> {args.out}  "

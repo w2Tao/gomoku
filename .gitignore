@@ -9,6 +9,7 @@ venv/
 data/*.npz
 # ...but the Gomocup-derived dataset is a curated artefact worth versioning
 !data/gomocup15.npz
+data/teacher15.npz
 data/*.npy
 data/selfplay/
 data/_shard_*.npz
