@@ -73,7 +73,12 @@ class SearchAgent:
     @torch.no_grad()
     def _values(self, planes):
         x = torch.from_numpy(planes).to(self.dev)
-        p = torch.softmax(self.net(x), dim=1)
+        out = self.net(x)
+        # a ValuePolicyNet returns (value_logits, policy_logits); the search only
+        # wants the value, so a tuple has to be unwrapped here
+        if isinstance(out, tuple):
+            out = out[0]
+        p = torch.softmax(out, dim=1)
         return (p[:, 2] - p[:, 0]).cpu().numpy()      # expected value in [-1,1]
 
     def move(self, my: int, their: int, last: int, rng):
@@ -95,8 +100,13 @@ class SearchAgent:
                         if self.plies > 1 else [])
 
         if self.plies == 1:
-            # children: opponent to move, own/opp swap
-            own_g = np.broadcast_to(opp[None, :] + oh, (k, CELLS))
+            # Child position, canonical for the opponent to move:
+            #   own  = their stones, unchanged
+            #   opp  = my stones plus the stone I just played
+            #   last = the stone I just played
+            # Adding `oh` to the own plane as well put the same stone on both
+            # sides, so the network was scoring a position that cannot exist.
+            own_g = np.broadcast_to(opp[None, :], (k, CELLS))
             opp_g = np.broadcast_to(own[None, :], (k, CELLS)) + oh
             last_g = oh
             v = self._values(np.stack([own_g, opp_g, last_g], 1).reshape(k, 3, H, W))
