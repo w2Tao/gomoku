@@ -42,6 +42,14 @@ EMBRYO26 一栏是**每臂 150 局的正式对比**：`v1` 比 `baseline` 高约
 
 **瓶颈在学生和它的训练配方上，不在监督的数量或深度。** 继续往上需要换一个量级的东西。
 
+## v2 实验（未替换默认）
+
+为了验证「更大基座 + 策略先验搜索」，训练了 `v2s1`（96×6，1,037,844 参数，Gomocup
+32k 步）和 `v2base`（在 167k 去重 RAPFI 主变上蒸馏 12k 步）。内部 policy 82.3% 对
+v1 的 76.3%，但外部 EMBRYO26 150 局是 32.6% 对 31.9%（z = 0.12，不显著）；策略先验
+搜索在 30 个开局上是 45–58%，而纯策略头是 86.7%——仍然被价值精度挡住。默认保持 `v1`。
+完整数据、训练命令和失败原因见 [`report.md`](report.md) §9。
+
 ## 快速开始
 
 模型权重和数据集体积较大，不在 git 里，发布在 Hugging Face 上。**克隆之后先跑一次下载脚本**，它会取回四个文件（基线、最终版 v1、两个数据集）并逐个校验 SHA-256（共约 5.3 MB，可重复执行，已存在的会跳过）：
@@ -85,6 +93,7 @@ gomoku/
     build_gomocup_dataset.py  Gomocup 棋谱 → 策略 + 胜负标签（当前主力数据）
     build_teacher_dataset.py  冻结启发式自博弈 → 策略 + 胜负标签
     build_distill_dataset.py  引擎主变 → 纯策略标签（`v1` 的训练数据，训练代号 `d3`）
+    build_distill_all.py      合并 dist2/3/6 → 去重蒸馏标签（v2 基座数据）
     train.py            价值网络训练
     train_policy.py     价值 + 策略训练
     freeze_baseline.py  把 checkpoint 冻结成不可变基线
@@ -94,6 +103,8 @@ gomoku/
     duel_engine.py      我方模型 vs Gomocup 引擎（pbrain 协议）
     baseline_duel.py    基线 vs 外部对手，配对赛
     eval_three.py       多个模型互相打，逐对给分
+    search_eval.py      策略先验搜索 vs 纯策略，配对评测
+    value_eval.py       价值头的三分类准确率 / MAE
     bench_solver.py     VCF / 威胁检测的基准
     restore_check.py    验证「GitHub + Hub 能否还原项目」
     tests.py            棋盘 / 位棋盘 / 五连 / 平面
@@ -103,9 +114,11 @@ gomoku/
   ckpt/                 模型快照
     <baseline-id>/      model.pt + manifest.json，界面自动发现（manifest 进版本库）
     v1/                 当前 ValuePolicyNet 架构的最终形态，界面默认模型
+    v2s1/ v2base/       v2 实验基座（权重本地训练，未发布；见 report.md §9）
     runs/<tag>/         训练过程的 checkpoint（已 git 忽略）
   data/                 数据集（全部 git 忽略，用 fetch_data.py 取回或 build_*.py 重建）
     gomocup15.npz       34.5 万局面（去重后）
+    dist_all.npz        合并 dist2/3/6 并去重后的策略标签（v2 基座）
     其余                solver 标签、老师数据、蒸馏标签等
     gomocup/            340 MB 原始棋谱
 ```
@@ -205,6 +218,8 @@ python code/duel_many.py EMBRYO26 baseline,v1 150 6 300
 | 脚本 | 用来回答什么 |
 |---|---|
 | `search_ct.py` | 价值头驱动搜索（1 层 / 2 层）是否优于纯策略头 |
+| `search_eval.py` | 新的更大基座上，策略先验搜索 vs 纯策略 |
+| `value_eval.py` | 价值头的三分类准确率 / MAE，以及按手数的变化 |
 | `q_eval.py` | 逐着法胜率头（Q head）能否排序着法 |
 | `build_selfplay_dataset.py` | 自博弈迭代有没有用 |
 | `build_engine_rl_dataset.py` | 以引擎为对手做 RL 有没有梯度 |

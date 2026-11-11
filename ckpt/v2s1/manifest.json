@@ -1,0 +1,47 @@
+{
+  "id": "v2s1",
+  "name": "v2s1 · 96x6 value+policy base (Gomocup)",
+  "created": "2026-11-11T22:04:52",
+  "model_type": "value_policy",
+  "source_run": "v2s1",
+  "source_checkpoint": "C:\\Users\\Administrator\\Desktop\\dessert\\gomoku\\ckpt\\runs\\v2s1\\best.pt",
+  "source_step": 12000,
+  "board": "15x15 freestyle gomoku, no forbidden moves",
+  "architecture": {
+    "channels": 96,
+    "blocks": 6,
+    "head_channels": 48,
+    "n_classes": 3
+  },
+  "parameters": 1037844,
+  "sha256": "b00a66d614e25a6d3e82195b8a50c4a7c1b90d756e475e33ee79aa6846b768b0",
+  "training": {
+    "data": "data\\gomocup15.npz",
+    "steps": 32000,
+    "warm_start": null,
+    "learning_rate": 0.0005,
+    "batch": 256,
+    "seed": 0,
+    "augmentation": "8-fold dihedral, per sample"
+  },
+  "metrics": {
+    "val_loss": 1.9500390249381332,
+    "value_loss": 0.4717749090480019,
+    "policy_loss": 1.4782641158901313,
+    "policy_acc": 0.5460615695909814,
+    "step": 12000,
+    "loss_kind": "value + policy",
+    "vs_heuristic_paired": null,
+    "vs_heuristic_note": null
+  },
+  "inference": {
+    "head": "policy",
+    "search": "none",
+    "selection": "argmax over legal cells, deterministic"
+  },
+  "known_limits": [
+    "one forward pass: no VCF, no double-three, no search",
+    "imitation of its label source, so it cannot exceed that source",
+    "value head is trained on game outcomes only; MAE 0.532 is still far above the ~0.116 move signal needed to rank moves"
+  ]
+}

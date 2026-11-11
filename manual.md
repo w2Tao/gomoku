@@ -190,6 +190,11 @@ policy  Conv1x1(C -> 1) -> flatten（CELLS 个 logits）+ 可学习的 CELLS 维
 | `PolicyAgent` | 一次前向，在合法格上取 argmax |
 | `RandomAgent` | 均匀随机 |
 
+v2 的实验（`report.md` §9）把 policy 和 value 拆开看：策略蒸馏会改善 policy，但同一
+trunk 的 value head 反而变差；因此搜索实验用 `SplitPolicySearchAgent`，policy 来自
+蒸馏后的 `v2base`，value 来自单独训练的 `v2s1`。在 value MAE 约 0.53 时，1 层和 2 层
+搜索都输给纯策略头，所以 `v1` 仍是默认模型。
+
 ### 启发式的七条规则（**已冻结**）
 
 > **这套规则已冻结，不再修改。** 配置固化在 `play.FROZEN_HEURISTIC`，构造用

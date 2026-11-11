@@ -1,0 +1,55 @@
+{
+  "id": "v2base",
+  "name": "v2base · 96x6 distilled base (RAPFI25 PV)",
+  "created": "2026-11-11T22:09:51",
+  "model_type": "value_policy",
+  "source_run": "v2base",
+  "source_checkpoint": "C:\\Users\\Administrator\\Desktop\\dessert\\gomoku\\ckpt\\runs\\v2base\\best.pt",
+  "source_step": 12000,
+  "board": "15x15 freestyle gomoku, no forbidden moves",
+  "architecture": {
+    "channels": 96,
+    "blocks": 6,
+    "head_channels": 48,
+    "n_classes": 3
+  },
+  "parameters": 1037844,
+  "sha256": "fd9ff43eb123b388fc42b9b2866d19b5a683443061cc6a1f4fa96490e170b15f",
+  "training": {
+    "data": "data\\dist_all.npz",
+    "steps": 12000,
+    "warm_start": "ckpt\\runs\\v2s1\\best.pt",
+    "learning_rate": 0.0002,
+    "batch": 256,
+    "seed": 0,
+    "augmentation": "8-fold dihedral, per sample"
+  },
+  "metrics": {
+    "val_loss": 1.216093314904132,
+    "value_loss": 0.0,
+    "policy_loss": 1.216093314904132,
+    "policy_acc": 0.586473074802426,
+    "step": 12000,
+    "loss_kind": "value + policy",
+    "vs_heuristic_paired": 0.823,
+    "vs_heuristic_note": "report.md section 9.3: 150 paired openings x 2 colours = 300 games vs the frozen heuristic",
+    "external_embryo26": 0.326,
+    "external_embryo26_note": "report.md section 9.3: 45/138 at 300 ms, 6 shards; v1 45/141, z=+0.12 (not significant)"
+  },
+  "inference": {
+    "head": "policy",
+    "search": "none",
+    "selection": "argmax over legal cells, deterministic"
+  },
+  "known_limits": [
+    "one forward pass: no VCF, no double-three, no search",
+    "imitation of its label source, so it cannot exceed that source",
+    "external strength is not established: 32.6% vs v1's 31.9% on EMBRYO26 (150 games per arm, z=+0.12); the internal +6 points did not transfer"
+  ],
+  "distillation": {
+    "teacher": "RAPFI25 principal variations (dist2/dist3/dist6 merged)",
+    "opening_plies": null,
+    "data": "data\\dist_all.npz",
+    "note": "12,000 steps, lr 2e-4, warm-start from v2s1; 167,173 deduplicated policy labels"
+  }
+}

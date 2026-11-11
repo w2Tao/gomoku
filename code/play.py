@@ -701,3 +701,136 @@ class PolicySearchAgent:
                 q[i] = min(q[i], value[k])
         self.last_q = q
         return mine[int(np.argmax(q))]
+
+
+class SplitPolicySearchAgent:
+    """Policy prior from one network, value from another.
+
+    Distillation updates the shared trunk to imitate RAPFI's moves; that improves
+    the policy but degrades a value head that was trained on game outcomes (the
+    distilled checkpoints lose several points of value accuracy). Keeping the two
+    networks separate lets the v2 base use its distilled policy while the value
+    comes from the outcome-trained base.
+
+    Search shape is the same as `PolicySearchAgent`: take the policy's top
+    `width` moves, give the opponent its top `replies`, and score the resulting
+    grandchildren with the value net. One exact fact is added: if the opponent
+    has any immediate five after our move, that root is an exact loss and is not
+    sent through the value head at all.
+    """
+
+    def __init__(self, policy_net, value_net, dev="cpu", width=12, replies=8,
+                 plies=2):
+        self.policy_net = policy_net
+        self.value_net = value_net
+        self.dev = dev
+        self.width = width
+        self.replies = replies
+        self.plies = plies
+        self.last_q = None
+
+    @torch.no_grad()
+    def _policy(self, planes):
+        out = self.policy_net(torch.from_numpy(planes).to(self.dev))
+        p = out[1] if isinstance(out, tuple) else out
+        return p.cpu().numpy()
+
+    @torch.no_grad()
+    def _value(self, planes):
+        out = self.value_net(torch.from_numpy(planes).to(self.dev))
+        v = out[0] if isinstance(out, tuple) else out
+        v = torch.softmax(v, 1)
+        return (v[:, 2] - v[:, 0]).cpu().numpy()
+
+    def move(self, my, their, last, rng):
+        occ = my | their
+        legal = [c for c in range(CELLS) if not (occ >> c) & 1]
+        if not legal:
+            return None
+
+        # exact facts first
+        for c in legal:
+            if has_five(my | (1 << c)):
+                return c
+        for c in legal:
+            if has_five(their | (1 << c)):
+                return c
+
+        own_p = bb_to_plane(my)
+        opp_p = bb_to_plane(their)
+        pol = self._policy(PolicySearchAgent._planes(own_p, opp_p, [last]))[0]
+        mine = sorted(legal, key=lambda c: -float(pol[c]))[:self.width]
+
+        oh = np.zeros((1, CELLS), dtype=np.float32)
+        roots = []
+        for c in mine:
+            oh[0, c] = 1.0
+            roots.append((own_p + oh[0], opp_p, c))
+            oh[0, c] = 0.0
+
+        own_r = np.stack([r[0] for r in roots])
+        opp_r = np.stack([r[1] for r in roots])
+        last_r = np.array([r[2] for r in roots])
+
+        if self.plies == 1:
+            # One-ply policy-pruned value search. The child is canonical for the
+            # opponent, so negate its value.
+            n = len(mine)
+            planes = np.zeros((n, 3, H, W), dtype=np.float32)
+            planes[:, 0] = np.broadcast_to(opp_p[None, :], (n, CELLS)).reshape(n, H, W)
+            planes[:, 1] = own_r.reshape(n, H, W)
+            for k, c in enumerate(mine):
+                planes[k, 2].flat[c] = 1.0
+            q = -self._value(planes)
+            for i, c in enumerate(mine):
+                occ2 = occ | (1 << c)
+                if any(has_five(their | (1 << x))
+                       for x in range(CELLS) if not (occ2 >> x) & 1):
+                    q[i] = -1.0
+            self.last_q = q
+            return mine[int(np.argmax(q))]
+
+        rpol = self._policy(PolicySearchAgent._planes(own_r, opp_r, last_r))
+
+        child_own, child_opp, child_last, owner = [], [], [], []
+        q = np.zeros(len(mine), dtype=np.float32)
+        for i, c in enumerate(mine):
+            occ2 = occ | (1 << c)
+            reply_legal = [x for x in range(CELLS) if not (occ2 >> x) & 1]
+            if not reply_legal:
+                q[i] = 0.0
+                continue
+            # exact: any opponent five ends the game immediately
+            if any(has_five(their | (1 << x)) for x in reply_legal):
+                q[i] = -1.0
+                continue
+            order = sorted(reply_legal, key=lambda x: -float(rpol[i][x]))
+            for x in order[:self.replies]:
+                own_g = own_r[i].copy()
+                opp_g = opp_r[i].copy()
+                opp_g[x] = 1.0
+                child_own.append(own_g)
+                child_opp.append(opp_g)
+                child_last.append(x)
+                owner.append(i)
+
+        if not child_own:
+            return mine[0]
+
+        n = len(owner)
+        planes = np.zeros((n, 3, H, W), dtype=np.float32)
+        planes[:, 0] = np.stack(child_own).reshape(n, H, W)
+        planes[:, 1] = np.stack(child_opp).reshape(n, H, W)
+        for k, c in enumerate(child_last):
+            planes[k, 2].flat[c] = 1.0
+        value = self._value(planes)
+
+        seen = np.zeros(len(mine), dtype=bool)
+        for k, i in enumerate(owner):
+            if not seen[i]:
+                q[i] = value[k]
+                seen[i] = True
+            else:
+                q[i] = min(q[i], value[k])
+        self.last_q = q
+        return mine[int(np.argmax(q))]
