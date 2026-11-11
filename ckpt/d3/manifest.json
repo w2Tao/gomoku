@@ -1,7 +1,7 @@
 {
   "id": "d3",
-  "name": "d3 · RAPFI PV distillation (rebuilt on the fixed dataset, local only)",
-  "created": "2026-11-11T20:52:30",
+  "name": "d3 · RAPFI PV distillation (rebuilt on the fixed dataset)",
+  "created": "2026-11-11T21:12:03",
   "model_type": "value_policy",
   "source_run": "d3v2",
   "source_checkpoint": "C:\\Users\\Administrator\\Desktop\\dessert\\gomoku\\ckpt\\runs\\d3v2\\best.pt",
@@ -34,8 +34,7 @@
   ],
   "distillation": {
     "teacher": "RAPFI25 principal variations (opening 6)",
-    "note": "fine-tuned from the rebuilt baseline; warm start ckpt/baseline/model.pt",
+    "note": "fine-tuned from the rebuilt baseline",
     "data": "data/dist3.npz"
-  },
-  "note": "not published: the upload failed with a TLS error on this machine"
+  }
 }

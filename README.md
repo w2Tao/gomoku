@@ -183,7 +183,7 @@ python code/eval_three.py 100
 | 仓库 | 内容 |
 |---|---|
 | [`gomoku-baseline`](https://huggingface.co/w2Tao/gomoku-baseline) | 冻结基线的完整权重（value + policy 双头，185,724 参数）与身份卡 |
-| [`gomoku-15x15`](https://huggingface.co/datasets/w2Tao/gomoku-15x15) | `gomocup15.npz`（发布的是去重前的 50 万版）、`teacher15.npz`（15 万局面） |
+| [`gomoku-15x15`](https://huggingface.co/datasets/w2Tao/gomoku-15x15) | `gomocup15.npz`（34.5 万局面，已去重）、`teacher15.npz`（15 万局面） |
 
 两个仓库的说明卡片分别在 `hf/model/README.md` 和 `hf/dataset/README.md`。
 
