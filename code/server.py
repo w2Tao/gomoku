@@ -22,7 +22,7 @@ import torch
 # The strongest model in the repository: policy distilled from RAPFI25's principal
 # variations (report.md 7.11-7.12). `baseline` is the supervised-only model it was
 # fine-tuned from, and is still selectable.
-DEFAULT_MODEL = "d2"
+DEFAULT_MODEL = "d3"
 
 import baselines
 import paths

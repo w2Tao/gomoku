@@ -68,14 +68,20 @@ def walk_pv(b0, b1, last, pv, mover):
     return rows
 
 
-def play_game(eng, agent, rng, timeout, engine_black):
-    """RAPFI (one colour) vs our model (the other) -> harvested rows."""
+def play_game(eng, agent, rng, timeout, engine_black, opening=OPENING):
+    """RAPFI (one colour) vs our model (the other) -> harvested rows.
+
+    `opening` random plies lead in. A wider opening pushes the teacher into a much
+    wider spread of positions, which matters because the PVs are conditioned on the
+    opponent: with a narrow opening the teacher only ever shows how to beat our own
+    model, and that transfers poorly to a real engine.
+    """
     our_colour = 1 if engine_black else 0
     engine_colour = 1 - our_colour
     bb = [0, 0]
     last = -1
     rows = []
-    random_left = OPENING
+    random_left = opening
 
     mv = eng.begin(engine_black)
     turn = 0
@@ -130,6 +136,9 @@ def main():
     ap.add_argument("--shard", type=int, default=0,
                     help="which slice of --games this process plays")
     ap.add_argument("--shards", type=int, default=1)
+    ap.add_argument("--opening", type=int, default=OPENING,
+                    help="random plies before the teacher takes over; "
+                         "wider spreads the positions it is asked about")
     args = ap.parse_args()
     out = args.out if os.path.dirname(args.out) else paths.data(args.out)
 
@@ -153,7 +162,8 @@ def main():
         engine_black = (g + args.shard) % 2 == 0
         try:
             eng.start()
-            got = play_game(eng, agent, rng, args.time_ms * 10, engine_black)
+            got = play_game(eng, agent, rng, args.time_ms * 10,
+                           engine_black, args.opening)
         except EngineError:
             errors += 1
             continue
