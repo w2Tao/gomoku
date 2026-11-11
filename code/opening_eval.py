@@ -29,6 +29,7 @@ from collections import defaultdict
 sys.path.insert(0, "code")
 
 from build_gomocup_dataset import parse, replay      # noqa: E402
+from engine import CELLS, has_five                   # noqa: E402
 from fetch_engines import ENGINE                     # noqa: E402
 from pbrain import EngineError, Pbrain, find_exe, rapfi_targets   # noqa: E402
 
@@ -47,18 +48,27 @@ def corpus_openings(limit=None):
     return ranked[:limit] if limit else ranked
 
 
-def score_line(eng, line, we_are_black, time_ms):
-    """Play `line` as our moves; return RAPFI's eval after it, from our side."""
+def score_line(eng, line, time_ms, trace=None):
+    """Play `line` as our moves (we are Black) and return RAPFI's verdict on it.
+
+    We must play first. Corpus lines usually start at the centre, and an engine given
+    Black takes the centre immediately, so asking it to open makes our first move
+    collide with its stone and score nothing -- that is why every "we are White" case
+    returned None. Scoring only as Black also makes the number directly comparable
+    across lines: it is Black's advantage after the line.
+
+    `trace`, when given, collects the eval after each of our moves so the scale can be
+    checked rather than assumed.
+    """
     eng.start()
     try:
-        mv = eng.begin(not we_are_black)       # engine is the other colour
+        eng.begin(False)                       # engine is White, so we move first
         turn = 0
+        engine_colour = 1
         bb = [0, 0]
         last = -1
-        engine_colour = 1 if we_are_black else 0
-        our_colour = 1 - engine_colour
         ours = list(line)
-        evals = []
+        mv = None
         for _ in range(64):
             occ = bb[0] | bb[1]
             if not any(not (occ >> c) & 1 for c in range(225)):
@@ -71,27 +81,27 @@ def score_line(eng, line, we_are_black, time_ms):
                 if not (0 <= cell < 225) or (occ >> cell) & 1:
                     break
                 ev, _pv = rapfi_targets(eng.last_messages)
-                # Only trust an eval once the whole line is on the board. Reading it
-                # at the engine's first turn judged a single move, which is why seven
-                # different openings reported the same number.
-                if ev is not None and not ours:
-                    evals.append(-ev if we_are_black else ev)
-                if evals:
-                    break                # verdict on the completed opening
+                if ev is not None:
+                    # Eval is from the engine's own point of view; we are Black
+                    if trace is not None:
+                        trace.append(-ev)
+                    if not ours:
+                        return -ev          # verdict on the completed opening
             else:
                 legal = [c for c in range(225) if not (occ >> c) & 1]
-                cell = ours.pop(0) if ours else legal[0]
+                if not ours:
+                    return None
+                cell = ours.pop(0)
                 if (occ >> cell) & 1 or cell not in legal:
-                    break
+                    return None
             bb[turn] |= 1 << cell
             last = cell
-            from engine import has_five
             if has_five(bb[turn]):
-                break
+                return None
             turn ^= 1
             if turn == engine_colour:
                 mv = eng.play(last % 15, last // 15, time_ms * 10)
-        return evals[0] if evals else None
+        return None
     except EngineError:
         return None
     finally:
@@ -117,20 +127,16 @@ def main():
     results = []
     for idx, (line, games) in enumerate(openings):
         eng = Pbrain(exe, time_ms=args.time_ms, stall_s=25.0)
-        per_colour = {}
-        for we_black in (True, False):
-            v = score_line(eng, line, we_black, args.time_ms)
-            per_colour["black" if we_black else "white"] = v
-            eng = Pbrain(exe, time_ms=args.time_ms, stall_s=25.0)
-        vals = [v for v in per_colour.values() if v is not None]
-        mean = statistics.mean(vals) if vals else None
+        trace = [] if idx == 0 else None
+        v = score_line(eng, line, args.time_ms, trace)
+        if trace:
+            print(f"  calibration (eval after each of our moves, line 1): {trace}",
+                  flush=True)
+        mean = v
         seq = " ".join(f"({c % 15},{c // 15})" for c in line)
-        results.append({"line": line, "seq": seq, "games": games,
-                        "black": per_colour["black"],
-                        "white": per_colour["white"], "mean": mean})
+        results.append({"line": line, "seq": seq, "games": games, "mean": mean})
         print(f"  {idx+1:>2}. {seq:<44} n={games:>5} "
-              f"black={per_colour['black']} white={per_colour['white']} "
-              f"mean={mean}", flush=True)
+              f"our advantage={mean}", flush=True)
 
     good = [r for r in results if r["mean"] is not None]
     good.sort(key=lambda r: -r["mean"])
