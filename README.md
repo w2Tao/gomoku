@@ -82,6 +82,7 @@ gomoku/
     build_dataset.py    随机对局 → VCF 精确标签
     build_gomocup_dataset.py  Gomocup 棋谱 → 策略 + 胜负标签（当前主力数据）
     build_teacher_dataset.py  冻结启发式自博弈 → 策略 + 胜负标签
+    build_distill_dataset.py  引擎主变 → 纯策略标签（`d3` 的训练数据）
     train.py            价值网络训练
     train_policy.py     价值 + 策略训练
     freeze_baseline.py  把 checkpoint 冻结成不可变基线
@@ -93,13 +94,17 @@ gomoku/
     eval_three.py       多个模型互相打，逐对给分
     bench_solver.py     VCF / 威胁检测的基准
     restore_check.py    验证「GitHub + Hub 能否还原项目」
+    tests.py            棋盘 / 位棋盘 / 五连 / 平面
+    test_solvers.py     窗口工具与强制胜检测
+    test_value_target.py 价值目标的规范
+    test_dataset.py     磁盘布局与二面体变换（缺 data/_smoke.npz 时跳过）
   ckpt/                 模型快照
     <baseline-id>/      model.pt + manifest.json，界面自动发现（manifest 进版本库）
     runs/<tag>/         训练过程的 checkpoint（已 git 忽略）
-  data/                 数据集
-    gomocup15.npz       34.5 万局面（去重后），已纳入版本库
-    其余                solver 标签、老师数据等，可重新生成（已 git 忽略）
-    gomocup/            340 MB 原始棋谱（已 git 忽略）
+  data/                 数据集（全部 git 忽略，用 fetch_data.py 取回或 build_*.py 重建）
+    gomocup15.npz       34.5 万局面（去重后）
+    其余                solver 标签、老师数据、蒸馏标签等
+    gomocup/            340 MB 原始棋谱
 ```
 
 ## 棋盘约定
@@ -153,6 +158,57 @@ python code/eval_three.py 100
 ```
 
 `--out` 只写文件名时会自动落到 `data/`。
+
+### 蒸馏 `d3`（当前最强）
+
+上面前四步只到这个仓库自己的能力上限。`d3` 的额外一步是从冠军引擎的主变里再学一遍：
+
+```bash
+# 6. 采集：让 RAPFI25 和我方模型对局，把主变每一手都当标签
+python code/fetch_engines.py RAPFI25
+python code/run_shards.py 6 2040 300 dist3 6     # 6 分片 x 340 局，约 10 分钟
+python code/merge_npz.py dist3.npz data/dist3_s0.npz ... data/dist3_s5.npz
+
+# 7. 微调（只用蒸馏数据，4,000 步）
+python code/train_policy.py --data data/dist3.npz --steps 4000 --lr 2e-4 \
+       --warm ckpt/baseline/model.pt --tag d3
+python code/freeze_baseline.py --src d3 --id d3
+```
+
+主变里**奇数位**是老师替我方想的着法——那才是新增的信息，`TURN` 本来就只回它自己那一步。
+`opening` 参数控制采集时的随机开局宽度（`run_shards.py` 的第 5 个参数），从 2 加到 6 会
+让老师走到更宽的局面里，标签更少但外部更强。
+
+### 判定强度
+
+内部标尺（对冻结启发式）**不可信**——它在本项目里三次给出与真实引擎相反的排序。判据请用
+外部引擎，并且**样本要够**：24 局的置信区间宽达 0–24%。
+
+```bash
+# 两臂对比，每臂 150 局，6 分片并行，约 6 分钟
+python code/duel_many.py EMBRYO26 baseline,d3 150 6 300
+```
+
+它直接给出 Wilson 区间和两臂的 z 检验，避免"点估计看起来涨了"这种误判。
+
+### 实验脚本
+
+下面这些是一次性的，用来产出 [`report.md`](report.md) §7 的结论，日常使用不需要它们：
+
+| 脚本 | 用来回答什么 |
+|---|---|
+| `search_ct.py` | 价值头驱动搜索（1 层 / 2 层）是否优于纯策略头 |
+| `q_eval.py` | 逐着法胜率头（Q head）能否排序着法 |
+| `build_selfplay_dataset.py` | 自博弈迭代有没有用 |
+| `build_engine_rl_dataset.py` | 以引擎为对手做 RL 有没有梯度 |
+| `handoff_eval.py` | 开局 / 局内双模型分工 |
+| `opening_stats.py` | 棋谱里的开局为什么这么集中（赛制，不是演化） |
+| `opening_eval.py` | 能否用引擎的 `Eval` 给开局排序 |
+| `pv_stability.py` | 蒸馏标签会不会随老师的搜索深度改变 |
+| `ply_eval.py` | 按手数拆分的准确率（由此发现棋谱的开局重复问题） |
+| `slice_by_ply.py` | 按手数切数据集 |
+| `pbrain.py` | pbrain 协议驱动（被 `duel_engine.py` 等导入） |
+
 
 ## 实测数据（15×15）
 

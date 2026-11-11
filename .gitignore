@@ -13,6 +13,7 @@ data/*.npz
 
 data/teacher15.npz
 data/*.npy
+data/*.json
 data/selfplay/
 data/_shard_*.npz
 data/*.gz
@@ -48,4 +49,7 @@ hf/_stage_dataset/
 # Not part of the published project; the other docs do not reference it.
 AGENT.md
 .hf_home/
-.hf_cache/
+*.pyc
+.pytest_cache/
+_duel_*.json
+_duel_*.log
