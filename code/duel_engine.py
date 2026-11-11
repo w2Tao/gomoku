@@ -87,6 +87,11 @@ def main():
     ap.add_argument("--opening", type=int, default=2,
                     help="random moves our agent plays before thinking")
     ap.add_argument("--verbose", action="store_true")
+    ap.add_argument("--shard", type=int, default=0,
+                    help="which strided slice of --games this process plays")
+    ap.add_argument("--shards", type=int, default=1)
+    ap.add_argument("--json", default=None,
+                    help="write {wins,losses,draws,errors} here for aggregation")
     args = ap.parse_args()
 
     prefer = args.prefer or ENGINE().get(args.engine, {}).get("prefer")
@@ -110,7 +115,9 @@ def main():
     eng = Pbrain(exe, time_ms=args.time_ms, verbose=args.verbose,
                  stall_s=stall,
                  begin_white=meta.get("begin_white", False))
-    for i in range(args.games):
+    # games are independent, so a shard takes a strided slice and the driver sums
+    order = list(range(args.games))[args.shard::args.shards]
+    for i in order:
         engine_black = i % 2 == 1
         try:
             # A fresh process per game. Reusing one leaks stale output into the
@@ -157,6 +164,12 @@ def main():
         print("no games completed")
     if errors:
         print(f"  {errors} games aborted by engine errors")
+    if args.json:
+        import json
+        with open(args.json, "w", encoding="utf-8") as f:
+            json.dump({"engine": args.engine, "model": args.baseline,
+                       "wins": wins, "losses": losses, "draws": draws,
+                       "errors": errors}, f)
     return 0
 
 

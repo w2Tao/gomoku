@@ -31,5 +31,10 @@
   "known_limits": [
     "one forward pass: no VCF, no double-three, no search",
     "imitation of its label source, so it cannot exceed that source"
-  ]
+  ],
+  "distillation": {
+    "teacher": "RAPFI25 principal variations (opening 6)",
+    "note": "fine-tuned from baseline; warm start ckpt/baseline/model.pt",
+    "data": "data/dist3.npz"
+  }
 }

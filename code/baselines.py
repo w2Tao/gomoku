@@ -44,6 +44,8 @@ def list_baselines() -> list[dict]:
             "source_step": m.get("source_step"),
             "created": m.get("created"),
             "inference": m.get("inference", {}),
+            # which engine the labels came from, if this model was distilled
+            "distillation": m.get("distillation"),
         })
     return out
 
