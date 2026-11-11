@@ -114,14 +114,46 @@ def score_line(eng, line, time_ms, trace=None):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=12)
-    ap.add_argument("--times", default="100,200,300,500",
-                    help="engine budgets to repeat each line at; RAPFI is "
-                         "deterministic at a fixed budget, so repeats must vary it")
+    ap.add_argument("--times", default="3000",
+                    help="engine budgets to score at; deep enough for the eval to "
+                         "settle, since it moves a lot between shallow and deep")
+    ap.add_argument("--converge", default="",
+                    help="budget ladder, e.g. 500,1000,2000,3000,5000,8000: read the "
+                         "top line at each and stop when the value settles. RAPFI is "
+                         "deterministic at a fixed budget, so repeating at one budget "
+                         "measures nothing -- convergence is the property that matters")
     ap.add_argument("--out", default="opening_scores.json")
     args = ap.parse_args()
 
     exe = find_exe(os.path.join("data", "engines", "RAPFI25"),
                    ENGINE()["RAPFI25"]["prefer"])
+
+    if args.converge:
+        ladder = [int(t) for t in args.converge.split(",") if t.strip()]
+        line, games = corpus_openings(1)[0]
+        seq = " ".join(f"({c % 15},{c // 15})" for c in line)
+        print(f"  convergence check on {seq} (n={games})\n")
+        prev, settled_at = None, None
+        for ms in ladder:
+            eng = Pbrain(exe, time_ms=ms, stall_s=40.0)
+            v = score_line(eng, line, ms)
+            delta = "" if prev is None else f"  delta {v - prev:+.0f}" if v is not None and prev is not None else ""
+            print(f"    {ms:>5} ms -> {v}{delta}", flush=True)
+            # settled only if every later budget also agrees; a single small
+            # step is not convergence (the 8 s reading swung 393 points after two
+            # budgets that happened to match)
+            if v is not None and prev is not None and abs(v - prev) >= 100:
+                settled_at = None
+            elif v is not None and prev is not None and settled_at is None:
+                settled_at = ms
+            prev = v if v is not None else prev
+        if settled_at:
+            print(f"\n  settled by {settled_at} ms (change < 100 between successive "
+                  f"budgets); score the rest at or above that")
+        else:
+            print("\n  did NOT settle -- do not rank lines on this reading")
+        return
+
     times = [int(t) for t in args.times.split(",") if t.strip()]
     openings = corpus_openings(args.limit)
     print(f"  scoring {len(openings)} opening lines with RAPFI25 "
