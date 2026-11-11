@@ -1,0 +1,35 @@
+{
+  "id": "open1",
+  "name": "open1 · opening specialist, ply <= 10, distilled from RAPFI PVs",
+  "created": "2026-11-11T18:59:29",
+  "model_type": "value_policy",
+  "source_run": "open1",
+  "source_checkpoint": "C:\\Users\\Administrator\\Desktop\\dessert\\gomoku\\ckpt\\runs\\open1\\best.pt",
+  "source_step": 3000,
+  "board": "15x15 freestyle gomoku, no forbidden moves",
+  "architecture": {
+    "channels": 48,
+    "blocks": 4,
+    "head_channels": 24,
+    "n_classes": 3
+  },
+  "parameters": 185724,
+  "training": {
+    "data": "data\\open5.npz",
+    "steps": 3000,
+    "augmentation": "8-fold dihedral, per sample"
+  },
+  "metrics": {
+    "val_loss": null,
+    "vs_heuristic_paired": null
+  },
+  "inference": {
+    "head": "policy",
+    "search": "none",
+    "selection": "argmax over legal cells, deterministic"
+  },
+  "known_limits": [
+    "one forward pass: no VCF, no double-three, no search",
+    "imitation of its label source, so it cannot exceed that source"
+  ]
+}

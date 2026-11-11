@@ -201,7 +201,10 @@ def main():
         own=pack_boards([r[0] for r in rows]),
         opp=pack_boards([r[1] for r in rows]),
         last=np.asarray([r[2] for r in rows], dtype=np.int16),
-        ply=np.zeros(len(rows), dtype=np.uint8),
+        # ply = stones already on the board, counted from the planes themselves so
+        # PV positions get the right value too. It was hardcoded to zero, which made
+        # any phase-based split over this data impossible.
+        ply=np.asarray([bin(r[0] | r[1]).count("1") for r in rows], dtype=np.uint8),
         cls=clss,
         game_id=gid,
         is_val=np.isin(gid, list(val)),
