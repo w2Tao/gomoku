@@ -1,10 +1,10 @@
 {
   "id": "d3",
-  "name": "d3 · RAPFI PV distillation, wide opening (6 plies), 49.8k labels",
-  "created": "2026-11-11T17:57:48",
+  "name": "d3 · RAPFI PV distillation (rebuilt on the fixed dataset, local only)",
+  "created": "2026-11-11T20:52:30",
   "model_type": "value_policy",
-  "source_run": "d3",
-  "source_checkpoint": "C:\\Users\\Administrator\\Desktop\\dessert\\gomoku\\ckpt\\runs\\d3\\best.pt",
+  "source_run": "d3v2",
+  "source_checkpoint": "C:\\Users\\Administrator\\Desktop\\dessert\\gomoku\\ckpt\\runs\\d3v2\\best.pt",
   "source_step": 4000,
   "board": "15x15 freestyle gomoku, no forbidden moves",
   "architecture": {
@@ -34,7 +34,8 @@
   ],
   "distillation": {
     "teacher": "RAPFI25 principal variations (opening 6)",
-    "note": "fine-tuned from baseline; warm start ckpt/baseline/model.pt",
+    "note": "fine-tuned from the rebuilt baseline; warm start ckpt/baseline/model.pt",
     "data": "data/dist3.npz"
-  }
+  },
+  "note": "not published: the upload failed with a TLS error on this machine"
 }

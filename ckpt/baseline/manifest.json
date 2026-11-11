@@ -1,10 +1,10 @@
 {
   "id": "baseline",
-  "name": "baseline · 策略网络（启发式蒸馏 + Gomocup 微调）",
-  "created": "2026-11-11T00:13:13",
+  "name": "baseline · t1 teacher -> fine-tune on the Gomocup corpus",
+  "created": "2026-11-11T20:45:40",
   "model_type": "value_policy",
   "source_run": "t2_finetune",
-  "source_checkpoint": "C:\\Users\\Administrator\\Desktop\\dessert\\gomoku\\ckpt\\runs\\t2_finetune\\best.pt",
+  "source_checkpoint": "C:\\Users\\Administrator\\Desktop\\dessert\\gomoku\\ckpt\\runs\\b2_fixed\\best.pt",
   "source_step": 8000,
   "board": "15x15 freestyle gomoku, no forbidden moves",
   "architecture": {
@@ -21,7 +21,7 @@
   },
   "metrics": {
     "val_loss": null,
-    "vs_heuristic_paired": 0.655
+    "vs_heuristic_paired": null
   },
   "inference": {
     "head": "policy",
@@ -31,5 +31,6 @@
   "known_limits": [
     "one forward pass: no VCF, no double-three, no search",
     "imitation of its label source, so it cannot exceed that source"
-  ]
+  ],
+  "note": "weights as published on Hugging Face; trained on the pre-dedupe corpus (504,247 positions). The builder now emits 344,989 after dedupe and the empty-board fix, which is not yet published -- see report.md 7.16."
 }
