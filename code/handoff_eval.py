@@ -9,7 +9,7 @@ opening half has its own data source.
 The question the games answer is whether handing over at ply N beats never handing
 over. `switch=0` means the in-game model plays everything, which is the control.
 
-    python code/handoff_eval.py d3 open1 120
+    python code/handoff_eval.py v1 open1 120
 """
 from __future__ import annotations
 
@@ -92,7 +92,7 @@ def score(a, b, openings, seed=77):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("ingame", nargs="?", default="d3")
+    ap.add_argument("ingame", nargs="?", default="v1")
     ap.add_argument("opening", nargs="?", default="open1")
     ap.add_argument("openings", nargs="?", type=int, default=120)
     args = ap.parse_args()

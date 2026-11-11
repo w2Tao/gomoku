@@ -4,7 +4,7 @@ The distillation questions all came down to sixteen-game and twenty-eight-game
 comparisons, where a 14-point gap is inside the noise. Resolving it needs ~150 games
 per arm, which serially is over an hour; games are independent, so they shard.
 
-    python code/duel_many.py EMBRYO26 baseline,d3 150 6
+    python code/duel_many.py EMBRYO26 baseline,v1 150 6
 
 Reports each arm's score with a Wilson interval and the two-arm comparison, so the
 answer is a yes/no rather than a point estimate.
@@ -62,7 +62,7 @@ def run_arm(engine, model, games, shards, time_ms):
 
 def main():
     engine = sys.argv[1] if len(sys.argv) > 1 else "EMBRYO26"
-    models = (sys.argv[2] if len(sys.argv) > 2 else "baseline,d3").split(",")
+    models = (sys.argv[2] if len(sys.argv) > 2 else "baseline,v1").split(",")
     games = int(sys.argv[3]) if len(sys.argv) > 3 else 150
     shards = int(sys.argv[4]) if len(sys.argv) > 4 else 6
     time_ms = sys.argv[5] if len(sys.argv) > 5 else "300"

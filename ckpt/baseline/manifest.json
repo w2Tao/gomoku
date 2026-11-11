@@ -20,8 +20,14 @@
     "augmentation": "8-fold dihedral, per sample"
   },
   "metrics": {
-    "val_loss": null,
-    "vs_heuristic_paired": null
+    "val_loss": 2.016893415,
+    "value_loss": 0.449647613935585,
+    "policy_loss": 1.5672458011060975,
+    "policy_acc": 0.5302789420436479,
+    "step": 8000,
+    "loss_kind": "value + policy",
+    "vs_heuristic_paired": 0.63,
+    "vs_heuristic_note": "README: 300 paired games vs the frozen heuristic; report section 7.16 re-measured the rebuilt baseline at 12.8% vs EMBRYO26"
   },
   "inference": {
     "head": "policy",
@@ -31,5 +37,6 @@
   "known_limits": [
     "one forward pass: no VCF, no double-three, no search",
     "imitation of its label source, so it cannot exceed that source"
-  ]
+  ],
+  "sha256": "191368ea924ab0d067a77cbcfe4554888e85089342cc18f4ca1ef5fbf109ca1c"
 }

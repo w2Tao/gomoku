@@ -1,0 +1,52 @@
+{
+  "id": "v1",
+  "name": "v1 · final ValuePolicyNet (RAPFI25 PV distillation)",
+  "created": "2026-11-11T21:29:03",
+  "model_type": "value_policy",
+  "source_run": "d3v2",
+  "source_checkpoint": "C:\\Users\\Administrator\\Desktop\\dessert\\gomoku\\ckpt\\runs\\d3v2\\best.pt",
+  "source_step": 4000,
+  "board": "15x15 freestyle gomoku, no forbidden moves",
+  "architecture": {
+    "channels": 48,
+    "blocks": 4,
+    "head_channels": 24,
+    "n_classes": 3
+  },
+  "parameters": 185724,
+  "sha256": "444e7d8cfc08b453fe60a6d83591eb8751e23faaf53a21a2177ea607ace2f624",
+  "training": {
+    "data": "data\\dist3.npz",
+    "steps": 4000,
+    "warm_start": "ckpt\\baseline\\model.pt",
+    "learning_rate": 0.0002,
+    "batch": 256,
+    "seed": 0,
+    "augmentation": "8-fold dihedral, per sample"
+  },
+  "metrics": {
+    "val_loss": 1.4107839669083382,
+    "value_loss": 0.0,
+    "policy_loss": 1.4107839669083382,
+    "policy_acc": 0.5304853590052147,
+    "step": 4000,
+    "loss_kind": "value + policy",
+    "vs_heuristic_paired": 0.757,
+    "vs_heuristic_note": "report.md §7.13: 300 paired games vs the frozen heuristic; the rebuilt weights were re-measured externally at 30.7% vs EMBRYO26 (§7.16)"
+  },
+  "inference": {
+    "head": "policy",
+    "search": "none",
+    "selection": "argmax over legal cells, deterministic"
+  },
+  "known_limits": [
+    "one forward pass: no VCF, no double-three, no search",
+    "imitation of its label source, so it cannot exceed that source"
+  ],
+  "distillation": {
+    "teacher": "RAPFI25 principal variations",
+    "opening_plies": 6,
+    "data": "data\\dist3.npz",
+    "note": "training tag d3; 49,849 policy labels; 4,000 steps, lr 2e-4, warm-start from baseline"
+  }
+}

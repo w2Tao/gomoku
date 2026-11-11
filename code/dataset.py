@@ -1,8 +1,9 @@
 """Loader for the solver-labelled value dataset.
 
-The .npz stores bitboards split across two uint64 words. Everything a training
-loop wants -- board planes, class weights, the 8-fold dihedral augmentation --
-is derived here, so the on-disk format stays small and lossless.
+The .npz stores bitboards split across WORDS uint64 words (4 for 15x15).
+Everything a training loop wants -- board planes, class weights, the 8-fold
+dihedral augmentation -- is derived here, so the on-disk format stays small and
+lossless.
 """
 from __future__ import annotations
 
@@ -107,7 +108,7 @@ DIHEDRAL = [_dihedral_perm(k) for k in range(8)]
 
 
 def augment(x, k, flat=True):
-    """Apply dihedral transform k to a (N,3,9,9) or (N,81) input."""
+    """Apply dihedral transform k to a (N,3,H,W) or (N,CELLS) input."""
     perm = DIHEDRAL[k % 8]
     if x.ndim == 4:
         n = x.shape[0]

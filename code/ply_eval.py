@@ -8,7 +8,7 @@ The direct check is agreement with the move an engine actually chose, split by p
 Early plies are the opening; a model that got worse there shows up as a drop in the
 first bucket even while the totals improve.
 
-    python code/ply_eval.py baseline,d2,d3
+    python code/ply_eval.py baseline,d2,v1
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ BUCKETS = [(1, 10), (11, 20), (21, 30), (31, 45), (46, 999)]
 
 
 def main():
-    models = (sys.argv[1] if len(sys.argv) > 1 else "baseline,d2,d3").split(",")
+    models = (sys.argv[1] if len(sys.argv) > 1 else "baseline,d2,v1").split(",")
     dev = "cuda" if torch.cuda.is_available() else "cpu"
 
     d = load(paths.data("gomocup15.npz"))

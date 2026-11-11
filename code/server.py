@@ -19,10 +19,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import torch
 
-# The strongest model in the repository: policy distilled from RAPFI25's principal
-# variations (report.md 7.11-7.12). `baseline` is the supervised-only model it was
+# The final form of the current ValuePolicyNet architecture: policy distilled from
+# RAPFI25's principal variations (report.md 7.11-7.13). It was trained under the tag
+# `d3` and is shipped as `v1`. `baseline` is the supervised-only model it was
 # fine-tuned from, and is still selectable.
-DEFAULT_MODEL = "d3"
+DEFAULT_MODEL = "v1"
 
 import baselines
 import paths
@@ -41,19 +42,24 @@ DEV = "cuda" if torch.cuda.is_available() else "cpu"
 def model_catalogue():
     items = []
     for b in baselines.list_baselines():
+        strength = b["strength_vs_teacher"]
+        label = b["name"]
+        if strength is not None:
+            label = f"{b['name']}  (vs 冻结启发式 {strength:.0%})"
         items.append({
             "id": b["id"],
-            "label": f"{b['name']}  (vs 贪心 {b['strength_vs_teacher']:.0%})"
-                     if b["strength_vs_teacher"] is not None else b["name"],
+            "label": label,
             "kind": "baseline",
             "detail": {
                 "params": b["params"],
                 "step": b["source_step"],
                 "model_type": b["model_type"],
-                "vs_teacher": b["strength_vs_teacher"],
+                "vs_heuristic": strength,
                 "search_depth": b["inference"].get("search_depth_plies"),
             },
         })
+    # Put the shipped default first; the rest stay alphabetical.
+    items.sort(key=lambda x: (x["id"] != DEFAULT_MODEL, x["id"]))
     items.append({"id": "heuristic",
                   "label": "启发式（VCF 深度 7 + 威胁评分）",
                   "kind": "heuristic", "detail": {}})
@@ -166,10 +172,12 @@ class Handler(BaseHTTPRequestHandler):
             with open(fp, "rb") as f:
                 return self._send(200, f.read(), "text/html; charset=utf-8")
         if path == "/api/models":
-            return self._send(200, {"models": model_catalogue(),
-                                    "default": (model_catalogue()[0]["id"]
-                                                if model_catalogue() else "greedy"),
-                                    "device": DEV})
+            catalogue = model_catalogue()
+            ids = [m["id"] for m in catalogue]
+            default = (DEFAULT_MODEL if DEFAULT_MODEL in ids
+                       else (ids[0] if ids else "random"))
+            return self._send(200, {"models": catalogue,
+                                    "default": default, "device": DEV})
         return self._send(404, {"error": "not found"}, "application/json")
 
     def do_POST(self):
@@ -200,8 +208,15 @@ def prepare():
         if isinstance(agent, SearchAgent):
             # warm up at a realistic batch size: cuDNN autotunes per shape, so a
             # batch-1 probe would leave the first real move slow
+            batch = CELLS
+        elif isinstance(agent, PolicyAgent):
+            # the policy path is a single forward pass per move
+            batch = 1
+        else:
+            batch = 0
+        if batch:
             with torch.no_grad():
-                agent.net(torch.zeros(CELLS, 3, H, W, device=DEV))
+                agent.net(torch.zeros(batch, 3, H, W, device=DEV))
         print(f"loaded : {item['id']} ({time.perf_counter()-t0:.1f}s)")
     return catalogue
 

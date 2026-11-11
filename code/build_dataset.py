@@ -9,9 +9,9 @@ Pipeline
            else -> drop (unknown; never feed 'unknown' to the loss)
         -> store canonically (own / opp / last), no colour bookkeeping
 
-The output is deliberately compact: bitboards are split into two uint64 words,
-so a record is ~40 bytes. Board planes and the 8-fold dihedral augmentation are
-built at load time by `dataset.py`, not stored.
+The output is deliberately compact: bitboards are split into WORDS uint64 words
+(4 on 15x15), so a record is ~41 bytes. Board planes and the 8-fold dihedral
+augmentation are built at load time by `dataset.py`, not stored.
 
 Splits are assigned per *game*, never per position: consecutive plies of the
 same game differ by one stone and would leak.

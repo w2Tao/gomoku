@@ -20,8 +20,14 @@
     "augmentation": "8-fold dihedral, per sample"
   },
   "metrics": {
-    "val_loss": null,
-    "vs_heuristic_paired": null
+    "val_loss": 1.4937402069,
+    "value_loss": 0.0,
+    "policy_loss": 1.493740206904236,
+    "policy_acc": 0.533181429792082,
+    "step": 3000,
+    "loss_kind": "value + policy",
+    "vs_heuristic_paired": null,
+    "vs_heuristic_note": null
   },
   "inference": {
     "head": "policy",
@@ -30,6 +36,8 @@
   },
   "known_limits": [
     "one forward pass: no VCF, no double-three, no search",
-    "imitation of its label source, so it cannot exceed that source"
-  ]
+    "imitation of its label source, so it cannot exceed that source",
+    "training data data/open5.npz is not present in this checkout; the weights are frozen but cannot be retrained here"
+  ],
+  "sha256": "65373302d079ed0e6f0992823f4ed8bbb08fc6f5a5d2bfe002e9a99479b9997b"
 }

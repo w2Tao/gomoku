@@ -1,6 +1,6 @@
 """Value network for 15x15 freestyle gomoku.
 
-Input  : (N, 3, 9, 9) float32
+Input  : (N, 3, 15, 15) float32
          plane 0 = own stones, plane 1 = opponent stones, plane 2 = the
          opponent's last move.  Everything is canonical (own/opponent relative
          to the side to move), so colour never appears in the representation.
@@ -10,15 +10,15 @@ Output : (N, 3) logits over [loss, draw, win] for the side to move.
 Design notes
 ------------
 * Receptive field is 3 + 4*blocks cells. Four blocks already give 19, which is
-  more than the 9-cell board, so every output unit can see the whole board.
+  more than the 15-cell board, so every output unit can see the whole board.
   Deeper than ~4 blocks buys connectivity, not sight.
 * Stride is always 1 and there is no pooling: gomoku value lives in exact cell
   geometry (a three is worthless one cell off), so the spatial resolution is
   never thrown away.
 * The head is 1x1 conv -> flatten -> linear. The 1x1 conv compresses channels
   while keeping the board layout, which is much cheaper than flattening the
-  full-width body (a 64-wide flatten would be 5184 x 128 = 663k parameters on
-  a 45k-sample dataset).
+  full-width body (a 48-wide flatten would be 48*225*128 = 1.38M parameters on a
+  few-hundred-thousand-sample dataset).
 * BatchNorm is used instead of LayerNorm because batches are large and the
   running statistics make inference deterministic and cheap.
 """
@@ -83,12 +83,12 @@ class ValueNet(nn.Module):
 
 
 class ValuePolicyNet(ValueNet):
-    """The same trunk, plus a policy head over the 81 cells.
+    """The same trunk, plus a policy head over the 225 cells.
 
-    The trunk is shared, so `baseline0` can warm-start it. The policy head is a
-    1x1 convolution that scores each cell plus a learned 81-dim positional bias
-    -- a move *is* a cell, so a per-cell score is the natural parameterisation,
-    and it adds only ~130 parameters.
+    The trunk is shared with the value-only model, so `baseline` can warm-start
+    it. The policy head is a 1x1 convolution that scores each cell plus a learned
+    225-dim positional bias -- a move *is* a cell, so a per-cell score is the
+    natural parameterisation, and the whole head adds only 273 parameters.
 
     `forward` returns (value_logits, policy_logits). The policy logits still
     need masking: occupied cells must be set to -inf before any softmax.
@@ -195,7 +195,7 @@ if __name__ == "__main__":
     describe(ValueNet(64, 6, 32))
     print()
     print("=" * 60)
-    print("data-to-parameter ratio (44,722 training positions):")
+    print("data-to-parameter ratio (344,989 training positions):")
     for ch, bl, hd in ((32, 3, 16), (48, 4, 24), (64, 6, 32), (96, 8, 48)):
         m = ValueNet(ch, bl, hd)
         n = sum(p.numel() for p in m.parameters())

@@ -116,8 +116,8 @@ class SearchAgent:
             return self._pick(q, legal, rng)
 
         # 2-ply: grandchild has *me* to move again
-        own_g = own[None, None, :] + oh[:, None, :]           # (k,1,81)
-        opp_g = opp[None, None, :] + oh[None, :, :]           # (1,k,81)
+        own_g = own[None, None, :] + oh[:, None, :]           # (k,1,225)
+        opp_g = opp[None, None, :] + oh[None, :, :]           # (1,k,225)
         last_g = np.broadcast_to(oh[None, :, :], (k, k, CELLS))
         planes = np.stack([
             np.broadcast_to(own_g, (k, k, CELLS)),

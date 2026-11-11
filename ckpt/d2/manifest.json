@@ -20,8 +20,14 @@
     "augmentation": "8-fold dihedral, per sample"
   },
   "metrics": {
-    "val_loss": null,
-    "vs_heuristic_paired": null
+    "val_loss": 1.3565266387,
+    "value_loss": 0.0,
+    "policy_loss": 1.3565266386946129,
+    "policy_acc": 0.5668490153172866,
+    "step": 4000,
+    "loss_kind": "value + policy",
+    "vs_heuristic_paired": 0.777,
+    "vs_heuristic_note": "report.md section 7.12: 77.7% vs the frozen heuristic"
   },
   "inference": {
     "head": "policy",
@@ -36,5 +42,6 @@
     "teacher": "RAPFI25 principal variations (opening 2)",
     "note": "fine-tuned from baseline; warm start ckpt/baseline/model.pt",
     "data": "data/dist2.npz"
-  }
+  },
+  "sha256": "05369889f4dfdb3b3b590d62902ac33f7c98852f0c34f4f6ec5381d76ab49fe3"
 }

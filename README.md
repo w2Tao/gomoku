@@ -3,23 +3,25 @@
 一个 15×15 无禁手五子棋项目。仓库里并列存在两个独立的对弈者：
 
 1. **规则型启发式** —— 连五、堵五、深度 7 的 VCF（连续冲四）搜索、双三攻防，再加一个静态威胁评分。配置固化在 `play.FROZEN_HEURISTIC`，用 `frozen_heuristic()` 构造。**已冻结，不要再调**：它对自己的打法已经完备。
-2. **学习的策略网络**（`baseline`）—— 185,724 参数，单次前向直接给出每个格子的分数，取最高者落子。**没有搜索、没有 VCF、没有双三检测。**
+2. **学习的策略网络**（`baseline` / `v1`）—— 185,724 参数，单次前向直接给出每个格子的分数，取最高者落子。**没有搜索、没有 VCF、没有双三检测。**
 
 ## 现状
 
-`d3` 是仓库里最强的 agent，也是界面的默认模型。它由 `baseline` 微调而来，训练标签来自
+`v1` 是仓库里最强的 agent，也是界面的默认模型。它是当前 `ValuePolicyNet` 架构的最终形态
+（训练代号 `d3`；后续升级会更换架构）。它由 `baseline` 微调而来，训练标签来自
 RAPFI25（2026 年 Gomocup 冠军）的**主变**——引擎在自己的搜索输出里给出整条变化线，
-奇数位正是「我方该走哪」。详见 [`report.md`](report.md) §7.10–7.15。
+奇数位正是「我方该走哪」。详见 [`report.md`](report.md) §7.10–7.16。
 
-| 对手 | `baseline` | `d3`（默认） | 局数 |
+| 对手 | `baseline` | `v1`（默认） | 局数 |
 |---|---|---|---|
 | 冻结启发式（内部标尺） | 63.0% | 75.7% | 300 |
-| EMBRYO26（2026 年 Gomocup 第 6） | **13.0%** | **31.2%** | **每臂 ~140** |
+| EMBRYO26（2026 年 Gomocup 第 6） | **12.8%** | **30.7%** | **每臂 150** |
 | TITO14（2014 年） | 0.0% | 0.0% | 24 |
 
-EMBRYO26 一栏是**每臂 150 局的正式对比**：`d3` 比 `baseline` 高 **18.2 个点，z = 3.67**，
-这是本项目唯一一个在外部标尺上显著的改进。此前二十几局的读数是 17.9% 对 32.1%——
-扩到 150 局后是 13.0% 对 31.2%，小样本那次把两边都估高了。
+EMBRYO26 一栏是**每臂 150 局的正式对比**：`v1` 比 `baseline` 高约 **18 个点**，这是本项目
+唯一一个在外部标尺上显著的改进。此前二十几局的读数是 17.9% 对 32.1%——扩到 150 局后是
+13.0% 对 31.2%（z = 3.67），小样本那次把两边都估高了；在修复后的数据集上重建并复测是
+12.8% 对 30.7%，结论不变。
 
 主变蒸馏有效的原因不是「教得更多」或「教得更深」，而是**换掉了谁在教**：
 
@@ -35,14 +37,14 @@ EMBRYO26 一栏是**每臂 150 局的正式对比**：`d3` 比 `baseline` 高 **
 逐着法胜率头（Q head）、以引擎为对手的 RL、开局/局内双模型分工、用引擎估值建开局表。
 数据和结论见 [`report.md`](report.md) §7。
 
-**诚实的水平：离 2026 年的第一梯队还很远，对 2014 年的引擎一局未胜。** 另外 `d3` 学到的
+**诚实的水平：离 2026 年的第一梯队还很远，对 2014 年的引擎一局未胜。** 另外 `v1` 学到的
 是「RAPFI25 在 300 ms 下怎么下」而不是「RAPFI25 怎么下」——它的老师本身是受时限削弱的。
 
 **瓶颈在学生和它的训练配方上，不在监督的数量或深度。** 继续往上需要换一个量级的东西。
 
 ## 快速开始
 
-模型权重和数据集体积较大，不在 git 里，发布在 Hugging Face 上。**克隆之后先跑一次下载脚本**，它会取回三个文件并逐个校验 SHA-256（共约 4.7 MB，可重复执行，已存在的会跳过）：
+模型权重和数据集体积较大，不在 git 里，发布在 Hugging Face 上。**克隆之后先跑一次下载脚本**，它会取回四个文件（基线、最终版 v1、两个数据集）并逐个校验 SHA-256（共约 5.3 MB，可重复执行，已存在的会跳过）：
 
 ```
 python code/fetch_data.py
@@ -58,7 +60,7 @@ python app.py          # Windows 上也可以直接双击 app.bat
 
 依赖只有 Python 3、PyTorch 和 NumPy。`fetch_data.py` 用的是标准库 HTTP，不需要登录 Hugging Face，也不需要 `huggingface_hub`。
 
-> 只想看代码、不打算跑的话可以跳过第 1 步；但要跑测试、训练或对弈，三个文件必须有。
+> 只想看代码、不打算跑的话可以跳过第 1 步；但要跑测试、训练或对弈，这些文件必须有。
 > `python code/fetch_data.py --check` 只校验不下载。
 
 ## 目录
@@ -82,7 +84,7 @@ gomoku/
     build_dataset.py    随机对局 → VCF 精确标签
     build_gomocup_dataset.py  Gomocup 棋谱 → 策略 + 胜负标签（当前主力数据）
     build_teacher_dataset.py  冻结启发式自博弈 → 策略 + 胜负标签
-    build_distill_dataset.py  引擎主变 → 纯策略标签（`d3` 的训练数据）
+    build_distill_dataset.py  引擎主变 → 纯策略标签（`v1` 的训练数据，训练代号 `d3`）
     train.py            价值网络训练
     train_policy.py     价值 + 策略训练
     freeze_baseline.py  把 checkpoint 冻结成不可变基线
@@ -100,6 +102,7 @@ gomoku/
     test_dataset.py     磁盘布局与二面体变换（缺 data/_smoke.npz 时跳过）
   ckpt/                 模型快照
     <baseline-id>/      model.pt + manifest.json，界面自动发现（manifest 进版本库）
+    v1/                 当前 ValuePolicyNet 架构的最终形态，界面默认模型
     runs/<tag>/         训练过程的 checkpoint（已 git 忽略）
   data/                 数据集（全部 git 忽略，用 fetch_data.py 取回或 build_*.py 重建）
     gomocup15.npz       34.5 万局面（去重后）
@@ -125,7 +128,7 @@ python code/fetch_engines.py EMBRYO26
 python code/fetch_engines.py --list
 
 # 打一场：默认 500 ms/步，颜色交替
-python code/duel_engine.py EMBRYO26 baseline 20 --time-ms 300
+python code/duel_engine.py EMBRYO26 v1 20 --time-ms 300
 ```
 
 引擎通过 pbrain 协议（stdin/stdout 文本）驱动。**坐标是 0-based（0–14），不是 1-based** ——这一点搞错会让每颗子偏一格，两边棋盘从第一手起就分叉，表现为引擎走了"已被占据"的格子。另外三个坑：
@@ -148,10 +151,11 @@ python code/build_teacher_dataset.py --positions 150000 --workers 12 --out teach
 # 3. 训练策略网络（value + policy 双头）
 python code/train_policy.py --data data/teacher15.npz --steps 8000 --tag t1_teacher
 python code/train_policy.py --data data/gomocup15.npz --steps 8000 \
-       --warm ckpt/runs/t1_teacher/best.pt --tag t2_finetune
+       --warm ckpt/runs/t1_teacher/best.pt --tag b2_fixed
 
 # 4. 冻结成基线，界面里就能选它
-python code/freeze_baseline.py --src t2_finetune --id baseline --vs-greedy 0.655
+#    当前 baseline 由 b2_fixed 冻结；t2_finetune 是 report.md §7.1 的历史 run
+python code/freeze_baseline.py --src b2_fixed --id baseline --vs-heuristic 0.630
 
 # 5. 三组模型对战
 python code/eval_three.py 100
@@ -159,9 +163,10 @@ python code/eval_three.py 100
 
 `--out` 只写文件名时会自动落到 `data/`。
 
-### 蒸馏 `d3`（当前最强）
+### 蒸馏 `v1`（当前最强；训练代号 `d3`）
 
-上面前四步只到这个仓库自己的能力上限。`d3` 的额外一步是从冠军引擎的主变里再学一遍：
+`v1` 是当前 `ValuePolicyNet` 架构的最终形态；后续升级会更换架构。上面前四步只到这个仓库
+自己的能力上限。`v1` 的额外一步是从冠军引擎的主变里再学一遍：
 
 ```bash
 # 6. 采集：让 RAPFI25 和我方模型对局，把主变每一手都当标签
@@ -169,10 +174,12 @@ python code/fetch_engines.py RAPFI25
 python code/run_shards.py 6 2040 300 dist3 6     # 6 分片 x 340 局，约 10 分钟
 python code/merge_npz.py dist3.npz data/dist3_s0.npz ... data/dist3_s5.npz
 
-# 7. 微调（只用蒸馏数据，4,000 步）
+# 7. 微调（只用蒸馏数据，4,000 步；重建版 run 目录是 d3v2）
 python code/train_policy.py --data data/dist3.npz --steps 4000 --lr 2e-4 \
-       --warm ckpt/baseline/model.pt --tag d3
-python code/freeze_baseline.py --src d3 --id d3
+       --warm ckpt/baseline/model.pt --tag d3v2
+python code/freeze_baseline.py --src d3v2 --id v1 \
+       --name "v1 · final ValuePolicyNet (RAPFI25 PV distillation)" \
+       --vs-heuristic 0.757 --teacher "RAPFI25 principal variations" --opening 6
 ```
 
 主变里**奇数位**是老师替我方想的着法——那才是新增的信息，`TURN` 本来就只回它自己那一步。
@@ -186,7 +193,7 @@ python code/freeze_baseline.py --src d3 --id d3
 
 ```bash
 # 两臂对比，每臂 150 局，6 分片并行，约 6 分钟
-python code/duel_many.py EMBRYO26 baseline,d3 150 6 300
+python code/duel_many.py EMBRYO26 baseline,v1 150 6 300
 ```
 
 它直接给出 Wilson 区间和两臂的 z 检验，避免"点估计看起来涨了"这种误判。
@@ -239,9 +246,10 @@ python code/duel_many.py EMBRYO26 baseline,d3 150 6 300
 | 仓库 | 内容 |
 |---|---|
 | [`gomoku-baseline`](https://huggingface.co/w2Tao/gomoku-baseline) | 冻结基线的完整权重（value + policy 双头，185,724 参数）与身份卡 |
+| [`gomoku-v1`](https://huggingface.co/w2Tao/gomoku-v1) | 当前架构的最终形态 `v1`（185,724 参数，RAPFI25 主变蒸馏）与身份卡 |
 | [`gomoku-15x15`](https://huggingface.co/datasets/w2Tao/gomoku-15x15) | `gomocup15.npz`（34.5 万局面，已去重）、`teacher15.npz`（15 万局面） |
 
-两个仓库的说明卡片分别在 `hf/model/README.md` 和 `hf/dataset/README.md`。
+三个仓库的说明卡片分别在 `hf/model/README.md`、`hf/v1/README.md` 和 `hf/dataset/README.md`。
 
 ## 文档
 

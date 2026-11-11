@@ -2,13 +2,13 @@
 
     loss = value_loss + lam * policy_loss
 
-  value_loss  : the same weighted cross entropy used for baseline0, on one-hot
-                solver labels and soft Monte-Carlo labels.
+  value_loss  : the same weighted cross entropy used for the value-only baseline,
+                on one-hot solver labels and soft Monte-Carlo labels.
   policy_loss : cross entropy on the distilled 1-ply move, masked to legal
                 cells so the network is never punished for the 30-odd occupied
                 ones.
 
-The trunk is warm-started from baseline0; only the policy head is new.
+The trunk is warm-started from the value-only baseline; only the policy head is new.
 """
 from __future__ import annotations
 

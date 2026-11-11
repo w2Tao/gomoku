@@ -5,7 +5,7 @@ value_weight to zero, so the labels are the principal variation only. But the PV
 also a product of search depth, and the collection ran at 300 ms. If the engine picks
 a different move when it thinks longer, then the labels are a 300 ms teacher's opinion
 rather than a strong one -- which is not necessarily wrong (the phase-1 comparison
-that produced d3 was also run at 300 ms) but should be known rather than assumed.
+that produced v1 (training tag d3) was also run at 300 ms) but should be known rather than assumed.
 
 Measures the engine's reply to a fixed opening at a shallow and a deep budget and
 reports how often they agree.
