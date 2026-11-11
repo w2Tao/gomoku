@@ -1,0 +1,35 @@
+{
+  "id": "d2",
+  "name": "d2 · RAPFI PV distillation, 91.4k labels (3.9x d1)",
+  "created": "2026-11-11T17:28:31",
+  "model_type": "value_policy",
+  "source_run": "d2",
+  "source_checkpoint": "C:\\Users\\Administrator\\Desktop\\dessert\\gomoku\\ckpt\\runs\\d2\\best.pt",
+  "source_step": 4000,
+  "board": "15x15 freestyle gomoku, no forbidden moves",
+  "architecture": {
+    "channels": 48,
+    "blocks": 4,
+    "head_channels": 24,
+    "n_classes": 3
+  },
+  "parameters": 185724,
+  "training": {
+    "data": "data\\dist2.npz",
+    "steps": 4000,
+    "augmentation": "8-fold dihedral, per sample"
+  },
+  "metrics": {
+    "val_loss": null,
+    "vs_heuristic_paired": null
+  },
+  "inference": {
+    "head": "policy",
+    "search": "none",
+    "selection": "argmax over legal cells, deterministic"
+  },
+  "known_limits": [
+    "one forward pass: no VCF, no double-three, no search",
+    "imitation of its label source, so it cannot exceed that source"
+  ]
+}

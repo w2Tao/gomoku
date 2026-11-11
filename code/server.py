@@ -19,6 +19,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import torch
 
+# The strongest model in the repository: policy distilled from RAPFI25's principal
+# variations (report.md 7.11-7.12). `baseline` is the supervised-only model it was
+# fine-tuned from, and is still selectable.
+DEFAULT_MODEL = "d2"
+
 import baselines
 import paths
 from engine import CELLS, H, W, has_five
@@ -105,7 +110,7 @@ def status_of(bb, moves):
 
 def handle_play(payload):
     moves = list(payload.get("moves", []))
-    model_id = payload.get("model", "baseline")
+    model_id = payload.get("model", DEFAULT_MODEL)
     bb = replay(moves)
     over, winner = status_of(bb, moves)
     if over:

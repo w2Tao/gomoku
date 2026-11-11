@@ -127,6 +127,9 @@ def main():
     ap.add_argument("--time-ms", type=int, default=300)
     ap.add_argument("--out", default="dist1.npz")
     ap.add_argument("--seed", type=int, default=3)
+    ap.add_argument("--shard", type=int, default=0,
+                    help="which slice of --games this process plays")
+    ap.add_argument("--shards", type=int, default=1)
     args = ap.parse_args()
     out = args.out if os.path.dirname(args.out) else paths.data(args.out)
 
@@ -138,13 +141,16 @@ def main():
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     net, man = baselines.load_baseline(args.model, dev)
     agent = PolicyAgent(net, dev)
-    rng = random.Random(args.seed)
+    rng = random.Random(args.seed + 1000 * args.shard)
+    # each shard plays its own slice: separate seed, and the colour alternation is
+    # offset per shard so shards do not replay the same openings
+    per_shard = (args.games + args.shards - 1) // args.shards
 
     eng = Pbrain(exe, time_ms=args.time_ms, stall_s=meta.get("stall_s", 10.0),
                  begin_white=meta.get("begin_white", False))
     rows, done, errors = [], 0, 0
-    for g in range(1, args.games + 1):
-        engine_black = g % 2 == 0
+    for g in range(1, per_shard + 1):
+        engine_black = (g + args.shard) % 2 == 0
         try:
             eng.start()
             got = play_game(eng, agent, rng, args.time_ms * 10, engine_black)
