@@ -114,35 +114,59 @@ def score_line(eng, line, time_ms, trace=None):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=12)
-    ap.add_argument("--time-ms", type=int, default=300)
+    ap.add_argument("--times", default="100,200,300,500",
+                    help="engine budgets to repeat each line at; RAPFI is "
+                         "deterministic at a fixed budget, so repeats must vary it")
     ap.add_argument("--out", default="opening_scores.json")
     args = ap.parse_args()
 
     exe = find_exe(os.path.join("data", "engines", "RAPFI25"),
                    ENGINE()["RAPFI25"]["prefer"])
+    times = [int(t) for t in args.times.split(",") if t.strip()]
     openings = corpus_openings(args.limit)
-    print(f"  scoring {len(openings)} opening lines with RAPFI25 @ "
-          f"{args.time_ms} ms\n")
+    print(f"  scoring {len(openings)} opening lines with RAPFI25 "
+          f"at {len(times)} budgets: {times}\n")
+    print(f"  {'line':<44} {'n':>5} {'mean':>8} {'sd':>7} {'reads':>6}")
+    print("  " + "-" * 74)
 
     results = []
     for idx, (line, games) in enumerate(openings):
-        eng = Pbrain(exe, time_ms=args.time_ms, stall_s=25.0)
-        trace = [] if idx == 0 else None
-        v = score_line(eng, line, args.time_ms, trace)
-        if trace:
-            print(f"  calibration (eval after each of our moves, line 1): {trace}",
-                  flush=True)
-        mean = v
+        vals, trace_seen = [], None
+        for ms in times:
+            eng = Pbrain(exe, time_ms=ms, stall_s=25.0)
+            trace = [] if (idx == 0 and trace_seen is None) else None
+            v = score_line(eng, line, ms, trace)
+            if trace:
+                trace_seen = trace
+            if v is not None:
+                vals.append(v)
+        mean = statistics.mean(vals) if vals else None
+        sd = statistics.pstdev(vals) if len(vals) > 1 else None
         seq = " ".join(f"({c % 15},{c // 15})" for c in line)
-        results.append({"line": line, "seq": seq, "games": games, "mean": mean})
-        print(f"  {idx+1:>2}. {seq:<44} n={games:>5} "
-              f"our advantage={mean}", flush=True)
+        results.append({"line": line, "seq": seq, "games": games,
+                        "mean": mean, "sd": sd, "reads": len(vals),
+                        "values": vals})
+        ms_ = f"{mean:>+8.1f}" if mean is not None else f"{'--':>8}"
+        sd_ = f"{sd:>7.1f}" if sd is not None else f"{'--':>7}"
+        print(f"  {seq:<44} {games:>5} {ms_} {sd_} {len(vals):>3}/{len(times)}",
+              flush=True)
+
+    if trace_seen:
+        print(f"\n  calibration (eval after each of our moves, line 1): {trace_seen}")
 
     good = [r for r in results if r["mean"] is not None]
     good.sort(key=lambda r: -r["mean"])
-    print("\n  ranked by our advantage (higher is better for us):")
+    print("\n  ranked by our advantage, with each line's repeat spread:")
     for r in good:
-        print(f"    {r['mean']:>+8.1f}  {r['seq']}")
+        spread = (f"  [{min(r['values'])}, {max(r['values'])}]"
+                  if len(r["values"]) > 1 else "  (one read)")
+        print(f"    {r['mean']:>+8.1f}  sd {r['sd'] or 0:>6.1f}  {r['seq']}{spread}")
+    if len(good) >= 2:
+        gap = good[0]["mean"] - good[-1]["mean"]
+        worst_sd = max((r["sd"] or 0) for r in good)
+        verdict = ("separable" if gap > 2 * worst_sd else "NOT separable")
+        print(f"\n  best-to-worst gap {gap:.0f}, largest repeat sd {worst_sd:.0f} "
+              f"-> {verdict}")
 
     out = args.out if os.path.dirname(args.out) else os.path.join("data", args.out)
     with open(out, "w", encoding="utf-8") as f:
