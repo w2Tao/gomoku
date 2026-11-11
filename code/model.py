@@ -150,6 +150,44 @@ class ValueQNet(ValuePolicyNet):
         return torch.softmax(value, dim=1)
 
 
+class ValuePolicyEvalNet(ValuePolicyNet):
+    """Policy + WDL value + a scalar eval head trained on RAPFI's `Eval`.
+
+    RAPFI narrates a continuous score for the position it searched. The WDL head
+    is trained on game outcomes, which is a much coarser signal (one number per
+    game); the scalar head is trained on `tanh(Eval / T)` and gives search a
+    continuous value to order leaves with.
+
+    `forward` returns `(value_logits, policy_logits, eval_scalar)`, with
+    `eval_scalar` in [-1, 1] from the side-to-move perspective.
+    """
+
+    has_eval = True
+
+    def __init__(self, channels: int = 48, blocks: int = 4,
+                 head_channels: int = 24, n_classes: int = N_CLASSES):
+        super().__init__(channels, blocks, head_channels, n_classes)
+        self.eval_head = nn.Sequential(
+            nn.Conv2d(channels, head_channels, 1, bias=False),
+            nn.BatchNorm2d(head_channels),
+            nn.ReLU(inplace=True),
+            nn.Flatten(),
+            nn.Linear(head_channels * CELLS, 1),
+            nn.Tanh(),
+        )
+
+    def forward(self, x):
+        trunk = self.body(self.stem(x))
+        value = self.head(trunk)
+        policy = self.policy_conv(trunk).flatten(1) + self.policy_bias
+        ev = self.eval_head(trunk).squeeze(1)
+        return value, policy, ev
+
+    def predict_proba(self, x):
+        value, _, _ = self.forward(x)
+        return torch.softmax(value, dim=1)
+
+
 # ---------------------------------------------------------------------------
 def describe(model: ValueNet) -> None:
     """Layer-by-layer shapes and parameter counts."""

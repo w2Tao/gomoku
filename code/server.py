@@ -81,7 +81,7 @@ def get_agent(model_id: str):
         except (KeyError, FileNotFoundError):
             # a stale model id (a bookmark, an old page) should not 500 the game
             net, manifest = baselines.load_baseline(DEFAULT_MODEL, DEV)
-        if manifest.get("model_type") == "value_policy":
+        if manifest.get("model_type") in ("value_policy", "value_policy_eval"):
             a = PolicyAgent(net, DEV)
         else:
             a = SearchAgent(net, DEV, plies=1)

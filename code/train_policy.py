@@ -1,14 +1,14 @@
 """Train a value + policy network.
 
-    loss = value_loss + lam * policy_loss
+    loss = value_loss + lam * policy_loss + eval_weight * eval_loss
 
-  value_loss  : the same weighted cross entropy used for the value-only baseline,
-                on one-hot solver labels and soft Monte-Carlo labels.
-  policy_loss : cross entropy on the distilled 1-ply move, masked to legal
-                cells so the network is never punished for the 30-odd occupied
-                ones.
+  value_loss  : weighted cross entropy on WDL targets (game outcome).
+  policy_loss : cross entropy on the distilled 1-ply move, masked to legal cells.
+  eval_loss   : MSE between a scalar eval head and tanh(RAPFI_Eval / T), only on
+                rows where eval_weight is 1. This is the value signal used by
+                search; game outcomes alone are too coarse.
 
-The trunk is warm-started from the value-only baseline; only the policy head is new.
+The trunk is normally warm-started from a value+policy base; the eval head is new.
 """
 from __future__ import annotations
 
@@ -25,7 +25,9 @@ import torch.nn.functional as F
 import paths
 from dataset import DIHEDRAL, load, to_planes
 from engine import CELLS, H, W
-from model import N_CLASSES, ValuePolicyNet, ValueQNet
+from model import (N_CLASSES, ValuePolicyEvalNet, ValuePolicyNet, ValueQNet)
+
+EVAL_UNKNOWN = -(2 ** 31)
 
 PERMS = torch.tensor(np.stack(DIHEDRAL), dtype=torch.long)      # perm[dest] = src
 INV = []
@@ -39,10 +41,15 @@ INV = torch.stack(INV)                                          # inv[src] = des
 def load_policy_data(path):
     d = load(path)
     x = to_planes(d)                    # (N, 3, H, W) float32, shared layout
+    n = len(d["cls"])
+    ev = d.get("eval", np.full(n, EVAL_UNKNOWN, dtype=np.int32))
+    ew = d.get("eval_weight", np.zeros(n, dtype=np.float32))
     return dict(
         x=torch.from_numpy(x),
         vt=torch.from_numpy(d["value_target"]),
         vw=torch.from_numpy(d["value_weight"]),
+        ev=torch.from_numpy(np.asarray(ev, dtype=np.int64)),
+        ew=torch.from_numpy(np.asarray(ew, dtype=np.float32)),
         mv=torch.from_numpy(d["move"].astype(np.int64)),
         val=torch.from_numpy(d["is_val"].astype(bool)),
         meta=d["meta"],
@@ -65,14 +72,20 @@ def legal_mask(x):
 
 
 @torch.no_grad()
-def evaluate(net, X, VT, VW, MV, bs=1024):
+def evaluate(net, X, VT, VW, MV, EV, EW, eval_temp=400.0, bs=1024):
     net.eval()
+    has_eval = isinstance(net, ValuePolicyEvalNet)
     vls, pls, correct, total = [], [], 0, 0
     qls, qok = [], 0
+    els, emae, en = [], 0.0, 0
     for i in range(0, X.shape[0], bs):
         xb = X[i:i + bs]
         out = net(xb)
-        if len(out) == 3:
+        ev_scalar = None
+        if has_eval:
+            v, p, ev_scalar = out
+            q = None
+        elif len(out) == 3:
             v, p, q = out
         else:
             (v, p), q = out, None
@@ -87,9 +100,16 @@ def evaluate(net, X, VT, VW, MV, bs=1024):
             target = tv[:, 2] - tv[:, 0]
             picked = q.gather(1, MV[i:i + bs].unsqueeze(1)).squeeze(1)
             qls.append(F.mse_loss(picked, target).item() * xb.shape[0])
-            # does the head rank the played move first, over legal cells?
             qm = q.masked_fill(~m, -1e9)
             qok += (qm.argmax(1) == MV[i:i + bs]).sum().item()
+        if ev_scalar is not None:
+            mask = EW[i:i + bs] > 0
+            if mask.any():
+                target = torch.tanh(EV[i:i + bs].float() / eval_temp)
+                diff = (ev_scalar - target) * mask.float()
+                els.append((diff * diff).sum().item())
+                emae += diff.abs().sum().item()
+                en += int(mask.sum().item())
         total += xb.shape[0]
     net.train()
     n = X.shape[0]
@@ -98,6 +118,10 @@ def evaluate(net, X, VT, VW, MV, bs=1024):
     if qls:
         out["q_loss"] = sum(qls) / n
         out["q_acc"] = qok / total
+    if has_eval:
+        out["eval_loss"] = sum(els) / max(en, 1)
+        out["eval_mae"] = emae / max(en, 1)
+        out["eval_labels"] = en
     return out
 
 
@@ -112,6 +136,12 @@ def main():
     ap.add_argument("--lam", type=float, default=1.0, help="policy loss weight")
     ap.add_argument("--q-weight", type=float, default=0.0,
                     help="above 0 trains a per-move win head, model becomes ValueQNet")
+    ap.add_argument("--eval-head", action="store_true",
+                    help="add a scalar head trained on RAPFI Eval (ValuePolicyEvalNet)")
+    ap.add_argument("--eval-weight", type=float, default=1.0,
+                    help="weight of the scalar eval loss")
+    ap.add_argument("--eval-temp", type=float, default=400.0,
+                    help="Eval -> tanh(Eval/T); calibrate on held-out games")
     ap.add_argument("--channels", type=int, default=48)
     ap.add_argument("--blocks", type=int, default=4)
     ap.add_argument("--head-channels", type=int, default=24)
@@ -129,10 +159,19 @@ def main():
     tr = ~d["val"]
     X, VT, VW, MV = (d["x"][tr].to(dev), d["vt"][tr].to(dev),
                      d["vw"][tr].to(dev), d["mv"][tr].to(dev))
+    EV, EW = d["ev"][tr].to(dev), d["ew"][tr].to(dev)
     Xv, VTv, VWv, MVv = (d["x"][~tr].to(dev), d["vt"][~tr].to(dev),
                          d["vw"][~tr].to(dev), d["mv"][~tr].to(dev))
+    EVv, EWv = d["ev"][~tr].to(dev), d["ew"][~tr].to(dev)
 
-    net_cls = ValueQNet if args.q_weight > 0 else ValuePolicyNet
+    if args.eval_head and args.q_weight > 0:
+        raise SystemExit("--eval-head and --q-weight are mutually exclusive")
+    if args.eval_head:
+        net_cls = ValuePolicyEvalNet
+    elif args.q_weight > 0:
+        net_cls = ValueQNet
+    else:
+        net_cls = ValuePolicyNet
     net = net_cls(args.channels, args.blocks, args.head_channels).to(dev)
     warm = ""
     if args.warm and os.path.isfile(args.warm):
@@ -145,7 +184,11 @@ def main():
     print(f"train / val : {int(tr.sum()):,} / {int((~tr).sum()):,}")
     print(f"model       : {args.channels}ch x {args.blocks} blocks, "
           f"{n_par:,} params{warm}")
-    print(f"loss        : value + {args.lam} x policy")
+    if args.eval_head:
+        print(f"loss        : value + {args.lam} x policy + "
+              f"{args.eval_weight} x eval (T={args.eval_temp:g})")
+    else:
+        print(f"loss        : value + {args.lam} x policy")
     print()
 
     opt = torch.optim.AdamW(net.parameters(), lr=args.lr, weight_decay=args.wd)
@@ -162,11 +205,16 @@ def main():
     hist, best = [], float("inf")
     t0 = time.time()
 
+    has_eval = isinstance(net, ValuePolicyEvalNet)
     for step in range(args.steps):
         idx = torch.randint(0, n_tr, (args.batch,), device=dev)
         xb, mb = augment(X[idx], MV[idx], dev)
         out = net(xb)
-        if len(out) == 3:
+        ev_scalar = None
+        if has_eval:
+            v, p, ev_scalar = out
+            q = None
+        elif len(out) == 3:
             v, p, q = out
         else:
             (v, p), q = out, None
@@ -184,29 +232,47 @@ def main():
             loss = loss + args.q_weight * lq
         else:
             lq = torch.zeros((), device=dev)
+        if has_eval:
+            mask = EW[idx] > 0
+            if mask.any():
+                target = torch.tanh(EV[idx].float() / args.eval_temp)
+                diff = (ev_scalar - target) * mask.float()
+                le = (diff * diff).sum() / mask.sum().clamp(min=1)
+            else:
+                le = torch.zeros((), device=dev)
+            loss = loss + args.eval_weight * le
+        else:
+            le = torch.zeros((), device=dev)
         opt.zero_grad(set_to_none=True)
         loss.backward()
         opt.step()
         sched.step()
 
         if (step + 1) % args.eval_every == 0 or step == args.steps - 1:
-            m = evaluate(net, Xv, VTv, VWv, MVv)
+            m = evaluate(net, Xv, VTv, VWv, MVv, EVv, EWv, args.eval_temp)
             m.update(step=step + 1, train_loss=loss.item(),
                      train_value=lv.item(), train_policy=lp.item(),
-                     train_q=float(lq.detach()), secs=round(time.time() - t0, 1))
+                     train_q=float(lq.detach()), train_eval=float(le.detach()),
+                     secs=round(time.time() - t0, 1))
             hist.append(m)
             star = ""
-            if m["value_loss"] + args.lam * m["policy_loss"] < best:
-                best = m["value_loss"] + args.lam * m["policy_loss"]
+            score = m["value_loss"] + args.lam * m["policy_loss"]
+            if has_eval:
+                score += args.eval_weight * m.get("eval_loss", 0.0)
+            if score < best:
+                best = score
                 torch.save({"state_dict": net.state_dict(),
                             "config": net.config, "step": step + 1,
-                            "policy": True, "metrics": m},
+                            "policy": True, "eval": has_eval, "metrics": m},
                            os.path.join(out_dir, "best.pt"))
                 star = "  *best"
+            train_extra = f" e {le.item():.3f}" if has_eval else ""
+            val_extra = (f" e {m.get('eval_loss', 0.0):.3f}"
+                         if has_eval else "")
             print(f"step {step+1:5d}  train {loss.item():.3f} "
-                  f"(v {lv.item():.3f} p {lp.item():.3f})  "
+                  f"(v {lv.item():.3f} p {lp.item():.3f}{train_extra})  "
                   f"val v {m['value_loss']:.3f} p {m['policy_loss']:.3f} "
-                  f"acc {m['policy_acc']:.1%}  {m['secs']:.0f}s{star}",
+                  f"acc {m['policy_acc']:.1%}{val_extra}  {m['secs']:.0f}s{star}",
                   flush=True)
 
     with open(os.path.join(out_dir, "metrics.json"), "w") as f:

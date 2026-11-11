@@ -24,17 +24,21 @@ import torch
 import paths
 
 
-def _history_loss(entry, lam):
+def _history_loss(entry, lam, eval_weight=0.0):
     """The objective actually selected on during training.
 
     `train.py` records a single `loss`; `train_policy.py` records `value_loss` and
-    `policy_loss` separately. Reading only `loss` (the old behaviour) silently
-    produced `val_loss: null` for every value_policy baseline.
+    `policy_loss` separately, and `ValuePolicyEvalNet` runs add `eval_loss`.
+    Reading only `loss` (the old behaviour) silently produced `val_loss: null`
+    for every value_policy baseline.
     """
     if entry.get("loss") is not None:
         return float(entry["loss"])
-    return (float(entry.get("value_loss", 0.0))
+    loss = (float(entry.get("value_loss", 0.0))
             + lam * float(entry.get("policy_loss", 0.0)))
+    if eval_weight:
+        loss += eval_weight * float(entry.get("eval_loss", 0.0))
+    return loss
 
 
 def _sha256(path):
@@ -77,10 +81,12 @@ def main():
     info = metrics.get("info", {})
     margs = metrics.get("args", {})
     lam = float(margs.get("lam", 1.0))
+    eval_weight = (float(margs.get("eval_weight", 1.0))
+                   if margs.get("eval_head") else 0.0)
 
     if hist:
-        best = min(hist, key=lambda h: _history_loss(h, lam))
-        best_loss = _history_loss(best, lam)
+        best = min(hist, key=lambda h: _history_loss(h, lam, eval_weight))
+        best_loss = _history_loss(best, lam, eval_weight)
     else:
         best, best_loss = {}, None
 
@@ -91,11 +97,27 @@ def main():
 
     # A `ValuePolicyNet` carries a policy head; play it straight off that head.
     has_policy = any(k.startswith("policy_") for k in ck["state_dict"])
-    model_type = "value_policy" if has_policy else "value"
+    has_eval = any(k.startswith("eval_") for k in ck["state_dict"])
+    if has_eval:
+        model_type = "value_policy_eval"
+    elif has_policy:
+        model_type = "value_policy"
+    else:
+        model_type = "value"
     n_par = metrics.get("params") or sum(
         v.numel() for v in ck["state_dict"].values())
 
-    if has_policy:
+    if has_eval:
+        recipe = {
+            "head": "policy + value (eval-trained scalar)",
+            "search": "policy prior; scalar value for leaves",
+            "selection": "policy argmax at the root",
+        }
+        limits = [
+            "the scalar head imitates RAPFI's Eval, not game-theoretic values",
+            "search over this value has not been shown to beat the policy head",
+        ]
+    elif has_policy:
         recipe = {
             "head": "policy",
             "search": "none",
@@ -141,6 +163,9 @@ def main():
             "learning_rate": margs.get("lr"),
             "batch": margs.get("batch"),
             "seed": margs.get("seed"),
+            "eval_head": bool(margs.get("eval_head")),
+            "eval_weight": margs.get("eval_weight"),
+            "eval_temp": margs.get("eval_temp"),
             "augmentation": "8-fold dihedral, per sample",
         },
         "metrics": {
@@ -148,8 +173,13 @@ def main():
             "value_loss": best.get("value_loss"),
             "policy_loss": best.get("policy_loss"),
             "policy_acc": best.get("policy_acc"),
+            "eval_loss": best.get("eval_loss"),
+            "eval_mae": best.get("eval_mae"),
+            "eval_labels": best.get("eval_labels"),
+            "eval_weight": eval_weight,
             "step": best.get("step"),
-            "loss_kind": "value + policy" if has_policy else "value",
+            "loss_kind": ("value + policy + eval" if has_eval
+                          else ("value + policy" if has_policy else "value")),
             "vs_heuristic_paired": args.vs_heuristic,
             "vs_heuristic_note": args.metric_note,
         },

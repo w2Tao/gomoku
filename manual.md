@@ -195,6 +195,11 @@ trunk 的 value head 反而变差；因此搜索实验用 `SplitPolicySearchAgen
 蒸馏后的 `v2base`，value 来自单独训练的 `v2s1`。在 value MAE 约 0.53 时，1 层和 2 层
 搜索都输给纯策略头，所以 `v1` 仍是默认模型。
 
+`ValuePolicyEvalNet`（`report.md` §10）再加一个标量头，用 RAPFI 的 `Eval` 做软标签。
+标量头能高相关地复现 Eval，但采集到的 eval 标签全部来自 RAPFI 的胜局，无法校准到
+胜率；把它放进搜索仍输给纯策略头。**模仿老师估值不等于给候选着法排序**——和 Q 头
+失败是同一类问题。
+
 ### 启发式的七条规则（**已冻结**）
 
 > **这套规则已冻结，不再修改。** 配置固化在 `play.FROZEN_HEURISTIC`，构造用

@@ -1,0 +1,64 @@
+{
+  "id": "v3eval",
+  "name": "v3eval · 96x6 + RAPFI Eval scalar head",
+  "created": "2026-11-11T23:32:29",
+  "model_type": "value_policy_eval",
+  "source_run": "v3eval",
+  "source_checkpoint": "C:\\Users\\Administrator\\Desktop\\dessert\\gomoku\\ckpt\\runs\\v3eval\\best.pt",
+  "source_step": 7000,
+  "board": "15x15 freestyle gomoku, no forbidden moves",
+  "architecture": {
+    "channels": 96,
+    "blocks": 6,
+    "head_channels": 48,
+    "n_classes": 3
+  },
+  "parameters": 1053349,
+  "sha256": "6dc166cb3fe8a68f8eb2b3e08289a55c2a41e4d4eb9e862d13c87c45132e218f",
+  "training": {
+    "data": "data\\dist_eval.npz",
+    "steps": 8000,
+    "warm_start": "ckpt\\runs\\v2s1\\best.pt",
+    "learning_rate": 0.0002,
+    "batch": 256,
+    "seed": 0,
+    "eval_head": true,
+    "eval_weight": 1.0,
+    "eval_temp": 700.0,
+    "augmentation": "8-fold dihedral, per sample"
+  },
+  "metrics": {
+    "val_loss": 1.2381365039368302,
+    "value_loss": 0.0,
+    "policy_loss": 1.2262098883818051,
+    "policy_acc": 0.5799599198396793,
+    "eval_loss": 0.011926615555025019,
+    "eval_mae": 0.07611880191536836,
+    "eval_labels": 602,
+    "eval_weight": 1.0,
+    "step": 7000,
+    "loss_kind": "value + policy + eval",
+    "vs_heuristic_paired": 0.783,
+    "vs_heuristic_note": "report.md section 10.3: 150 paired openings x 2 colours = 300 games vs the frozen heuristic; v2base 82.3%",
+    "scalar_eval_mae": 0.0761,
+    "scalar_eval_corr": 0.9673,
+    "scalar_eval_labels": 602,
+    "scalar_eval_note": "held-out dist_eval eval labels at T=700; all collected eval positions came from games RAPFI won, so outcome calibration is impossible"
+  },
+  "inference": {
+    "head": "policy + value (eval-trained scalar)",
+    "search": "policy prior; scalar value for leaves",
+    "selection": "policy argmax at the root"
+  },
+  "known_limits": [
+    "the scalar head imitates RAPFI's Eval, not game-theoretic values",
+    "search over this value has not been shown to beat the policy head",
+    "all eval labels were collected from positions RAPFI went on to win; the scalar head imitates Eval but policy-prior search over it loses badly"
+  ],
+  "distillation": {
+    "teacher": "RAPFI25 Eval + PV (dist_eval)",
+    "opening_plies": 6,
+    "data": "data\\dist_eval.npz",
+    "note": "8,000 steps, lr 2e-4, warm-start v2s1; scalar head MSE to tanh(Eval/700)"
+  }
+}

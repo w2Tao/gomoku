@@ -12,6 +12,12 @@ is the reply it expects from us -- and that odd-indexed half is exactly the sign
 the policy head needs: "in a position where I am to move, this is what the champion
 would play". PV[0] alone is just the move we already get from TURN.
 
+`Eval` is stored as a raw integer for the head position of every PV (the position
+RAPFI actually searched). `eval_weight` is 1 there and 0 on the rest of the PV:
+we do not invent a value for positions the engine never evaluated. `outcome` is
+the eventual game result from the mover's perspective, kept so the eval scale can
+be calibrated offline. The training side converts eval to `tanh(eval / T)`.
+
 Our model supplies the opening randomness: engine-vs-engine games are deterministic
 from an empty board (no reliable way to hand an engine a position), so every game
 would be identical.
@@ -37,6 +43,7 @@ from play import PolicyAgent
 from pbrain import EngineError, Pbrain, find_exe, rapfi_targets
 
 OPENING = 2
+EVAL_UNKNOWN = -(2 ** 31)
 
 
 def onehot(cls_arr):
@@ -45,11 +52,12 @@ def onehot(cls_arr):
     return out
 
 
-def walk_pv(b0, b1, last, pv, mover):
+def walk_pv(b0, b1, last, pv, mover, eval0=None):
     """Label every position along the PV, in canonical mover form.
 
-    `mover` is whose turn it is at the head of the line. Returns
-    [(own, opp, last, cell, mover, depth_in_line, eval_known)].
+    `eval0` is RAPFI's score for the position at the head of the line (the
+    position it actually searched); the rest of the PV has no eval label.
+    Returns [(own, opp, last, cell, mover, depth_in_line, is_head, eval)].
     """
     rows = []
     bb = [b0, b1]
@@ -59,7 +67,8 @@ def walk_pv(b0, b1, last, pv, mover):
         if (bb[0] | bb[1]) >> cell & 1:
             break                      # PV left the game we know; stop
         own, opp = (bb[0], bb[1]) if turn == 0 else (bb[1], bb[0])
-        rows.append((own, opp, prev, cell, turn, k, k == 0))
+        rows.append((own, opp, prev, cell, turn, k, k == 0,
+                     eval0 if k == 0 else None))
         bb[turn] |= 1 << cell
         prev = cell
         if has_five(bb[turn]):
@@ -69,13 +78,7 @@ def walk_pv(b0, b1, last, pv, mover):
 
 
 def play_game(eng, agent, rng, timeout, engine_black, opening=OPENING):
-    """RAPFI (one colour) vs our model (the other) -> harvested rows.
-
-    `opening` random plies lead in. A wider opening pushes the teacher into a much
-    wider spread of positions, which matters because the PVs are conditioned on the
-    opponent: with a narrow opening the teacher only ever shows how to beat our own
-    model, and that transfers poorly to a real engine.
-    """
+    """RAPFI (one colour) vs our model (the other) -> (rows, winner colour)."""
     our_colour = 1 if engine_black else 0
     engine_colour = 1 - our_colour
     bb = [0, 0]
@@ -90,7 +93,7 @@ def play_game(eng, agent, rng, timeout, engine_black, opening=OPENING):
         occ = bb[0] | bb[1]
         legal = [c for c in range(CELLS) if not (occ >> c) & 1]
         if not legal:
-            return rows
+            return rows, None
 
         if turn == engine_colour:
             if mv is None:
@@ -103,26 +106,26 @@ def play_game(eng, agent, rng, timeout, engine_black, opening=OPENING):
             if pv and pv[0] != cell:
                 pv = [cell] + [c for c in pv if c != cell]   # trust TURN over the PV
             if len(pv) > 1:
-                rows.extend(walk_pv(bb[0], bb[1], last, pv, turn))
+                rows.extend(walk_pv(bb[0], bb[1], last, pv, turn, eval0=_eval))
             else:
                 own, opp = (bb[0], bb[1]) if turn == 0 else (bb[1], bb[0])
-                rows.append((own, opp, last, cell, turn, 0, True))
+                rows.append((own, opp, last, cell, turn, 0, True, _eval))
         elif random_left > 0:
             cell = rng.choice(legal)
             random_left -= 1
         else:
             cell = agent.move(bb[turn], bb[turn ^ 1], last, rng)
             if cell is None:
-                return rows
+                return rows, None
 
         bb[turn] |= 1 << cell
         last = cell
         if has_five(bb[turn]):
-            return rows
+            return rows, turn
         turn ^= 1
         if turn == engine_colour:
             mv = eng.play(last % 15, last // 15, timeout)
-    return rows
+    return rows, None
 
 
 def main():
@@ -151,19 +154,18 @@ def main():
     net, man = baselines.load_baseline(args.model, dev)
     agent = PolicyAgent(net, dev)
     rng = random.Random(args.seed + 1000 * args.shard)
-    # each shard plays its own slice: separate seed, and the colour alternation is
-    # offset per shard so shards do not replay the same openings
     per_shard = (args.games + args.shards - 1) // args.shards
 
     eng = Pbrain(exe, time_ms=args.time_ms, stall_s=meta.get("stall_s", 10.0),
                  begin_white=meta.get("begin_white", False))
-    rows, done, errors = [], 0, 0
+    rows, winners, gids = [], [], []
+    done, errors = 0, 0
     for g in range(1, per_shard + 1):
         engine_black = (g + args.shard) % 2 == 0
         try:
             eng.start()
-            got = play_game(eng, agent, rng, args.time_ms * 10,
-                           engine_black, args.opening)
+            got, winner = play_game(eng, agent, rng, args.time_ms * 10,
+                                    engine_black, args.opening)
         except EngineError:
             errors += 1
             continue
@@ -173,6 +175,8 @@ def main():
             except Exception:
                 pass
         rows.extend(got)
+        winners.extend([winner] * len(got))
+        gids.extend([g] * len(got))
         done += 1
         if g % 25 == 0:
             print(f"  {g} games  {len(rows):,} labels  "
@@ -180,46 +184,66 @@ def main():
 
     if not rows:
         sys.exit("no labels")
-    ours = sum(1 for r in rows if r[4] != 0)     # positions where we are to move
-    print(f"\ngames {done}  aborted {errors}  labels {len(rows):,}")
 
-    # the mover won whenever the position is inside the teacher's winning line;
-    # we do not know the result, so value labels come only from the head position
-    # of each line and are left at "unknown" elsewhere
-    clss = np.full(len(rows), 1, dtype=np.uint8)          # 1 = draw/unknown
-    gid = np.zeros(len(rows), dtype=np.int64)
-    block = max(1, len(rows) // max(done, 1))
-    for i in range(len(rows)):
-        gid[i] = i // block
+    gid = np.asarray(gids, dtype=np.int64)
+    own = [r[0] for r in rows]
+    opp = [r[1] for r in rows]
+    last = [r[2] for r in rows]
+    move = [r[3] for r in rows]
+    ply = [bin(r[0] | r[1]).count("1") for r in rows]
+    evals, eval_w, outcomes = [], [], []
+    for r, winner in zip(rows, winners):
+        ev = r[7]
+        if ev is None:
+            evals.append(EVAL_UNKNOWN)
+            eval_w.append(0.0)
+        else:
+            evals.append(int(ev))
+            eval_w.append(1.0)
+        if winner is None:
+            outcomes.append(-1)
+        else:
+            outcomes.append(1 if winner == r[4] else 0)
+    evals = np.asarray(evals, dtype=np.int32)
+    eval_w = np.asarray(eval_w, dtype=np.float32)
+    outcomes = np.asarray(outcomes, dtype=np.int8)
 
+    clss = np.full(len(rows), 1, dtype=np.uint8)          # placeholder: draw
     rng2 = np.random.default_rng(args.seed)
     games = np.unique(gid)
     val = set(rng2.choice(games, size=max(1, int(len(games) * 0.1)),
                           replace=False).tolist())
 
+    n_eval = int(eval_w.sum())
+    print(f"\ngames {done}  aborted {errors}  labels {len(rows):,}  "
+          f"eval labels {n_eval:,}")
+    print(f"eval range {evals[eval_w > 0].min() if n_eval else 0} .. "
+          f"{evals[eval_w > 0].max() if n_eval else 0}")
+
     data = dict(
-        own=pack_boards([r[0] for r in rows]),
-        opp=pack_boards([r[1] for r in rows]),
-        last=np.asarray([r[2] for r in rows], dtype=np.int16),
-        # ply = stones already on the board, counted from the planes themselves so
-        # PV positions get the right value too. It was hardcoded to zero, which made
-        # any phase-based split over this data impossible.
-        ply=np.asarray([bin(r[0] | r[1]).count("1") for r in rows], dtype=np.uint8),
+        own=pack_boards(own),
+        opp=pack_boards(opp),
+        last=np.asarray(last, dtype=np.int16),
+        ply=np.asarray(ply, dtype=np.uint8),
         cls=clss,
         game_id=gid,
         is_val=np.isin(gid, list(val)),
-        move=np.asarray([r[3] for r in rows], dtype=np.int16),
+        move=np.asarray(move, dtype=np.int16),
         value_target=onehot(clss),
         value_weight=np.zeros(len(rows), dtype=np.float32),
+        eval=evals,
+        eval_weight=eval_w,
+        outcome=outcomes,
         meta=np.array(json.dumps({
-            "source": f"{args.engine} PV distillation at {args.time_ms} ms",
+            "source": f"{args.engine} PV+Eval distillation at {args.time_ms} ms",
             "labels": len(rows),
-            "our_side_positions": int(ours),
-            "note": "policy labels only; value targets are unset",
+            "eval_labels": n_eval,
+            "note": "policy everywhere; eval only at PV head positions; "
+                    "value_weight is zero (scalar eval head uses eval/eval_weight)",
         })),
     )
     np.savez_compressed(out, **data)
-    print(f"our-side positions {ours:,} | saved -> {out} "
+    print(f"eval labels {n_eval:,} | saved -> {out} "
           f"({os.path.getsize(out)/1e6:.1f} MB)")
 
 

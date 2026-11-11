@@ -50,6 +50,14 @@ v1 的 76.3%，但外部 EMBRYO26 150 局是 32.6% 对 31.9%（z = 0.12，不显
 搜索在 30 个开局上是 45–58%，而纯策略头是 86.7%——仍然被价值精度挡住。默认保持 `v1`。
 完整数据、训练命令和失败原因见 [`report.md`](report.md) §9。
 
+## v3 实验（未替换默认）
+
+把 RAPFI 的 `Eval` 存成软价值标签，新增 `ValuePolicyEvalNet` 的标量头（+15,505 参数）。
+采集到 6,123 个 eval 标签，但它们全部来自 RAPFI 的胜局，无法校准到胜率；标量头能
+高相关地复现 Eval（MAE 0.076、corr +0.967），但把它放进搜索反而更差：1 层 6.7%、
+2 层 18.3%，纯策略头 86.7%。默认仍是 `v1`，`v3eval` 不发布。详见
+[`report.md`](report.md) §10。
+
 ## 快速开始
 
 模型权重和数据集体积较大，不在 git 里，发布在 Hugging Face 上。**克隆之后先跑一次下载脚本**，它会取回四个文件（基线、最终版 v1、两个数据集）并逐个校验 SHA-256（共约 5.3 MB，可重复执行，已存在的会跳过）：
@@ -92,7 +100,7 @@ gomoku/
     build_dataset.py    随机对局 → VCF 精确标签
     build_gomocup_dataset.py  Gomocup 棋谱 → 策略 + 胜负标签（当前主力数据）
     build_teacher_dataset.py  冻结启发式自博弈 → 策略 + 胜负标签
-    build_distill_dataset.py  引擎主变 → 纯策略标签（`v1` 的训练数据，训练代号 `d3`）
+    build_distill_dataset.py  引擎主变 + Eval → 策略 / 软价值标签（v1/v3 数据）
     build_distill_all.py      合并 dist2/3/6 → 去重蒸馏标签（v2 基座数据）
     train.py            价值网络训练
     train_policy.py     价值 + 策略训练
@@ -105,6 +113,8 @@ gomoku/
     eval_three.py       多个模型互相打，逐对给分
     search_eval.py      策略先验搜索 vs 纯策略，配对评测
     value_eval.py       价值头的三分类准确率 / MAE
+    scalar_eval.py      Eval 软价值头的标量 MAE / BCE
+    eval_calibrate.py   用实际胜负标定 RAPFI Eval 的温度 T
     bench_solver.py     VCF / 威胁检测的基准
     restore_check.py    验证「GitHub + Hub 能否还原项目」
     tests.py            棋盘 / 位棋盘 / 五连 / 平面
@@ -119,6 +129,7 @@ gomoku/
   data/                 数据集（全部 git 忽略，用 fetch_data.py 取回或 build_*.py 重建）
     gomocup15.npz       34.5 万局面（去重后）
     dist_all.npz        合并 dist2/3/6 并去重后的策略标签（v2 基座）
+    dist_eval.npz       RAPFI Eval + PV 标签（v3 的标量价值头）
     其余                solver 标签、老师数据、蒸馏标签等
     gomocup/            340 MB 原始棋谱
 ```
@@ -220,6 +231,8 @@ python code/duel_many.py EMBRYO26 baseline,v1 150 6 300
 | `search_ct.py` | 价值头驱动搜索（1 层 / 2 层）是否优于纯策略头 |
 | `search_eval.py` | 新的更大基座上，策略先验搜索 vs 纯策略 |
 | `value_eval.py` | 价值头的三分类准确率 / MAE，以及按手数的变化 |
+| `scalar_eval.py` | Eval 软价值头的标量精度 / 对实际胜负的校准 |
+| `eval_calibrate.py` | RAPFI `Eval` 到胜率/`tanh` 的温度标定 |
 | `q_eval.py` | 逐着法胜率头（Q head）能否排序着法 |
 | `build_selfplay_dataset.py` | 自博弈迭代有没有用 |
 | `build_engine_rl_dataset.py` | 以引擎为对手做 RL 有没有梯度 |

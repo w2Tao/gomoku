@@ -98,6 +98,8 @@ def main():
                     help="1 = policy-pruned value ranking; 2 = two-ply search")
     ap.add_argument("--value-model", default=None,
                     help="separate value net, e.g. v2s1")
+    ap.add_argument("--scalar-value", action="store_true",
+                    help="value model is a ValuePolicyEvalNet; use its scalar head")
     args = ap.parse_args()
     if args.plies == 1 and not args.value_model:
         raise SystemExit("--plies 1 needs --value-model (the split agent)")
@@ -111,7 +113,8 @@ def main():
         vnet, vman = baselines.load_baseline(args.value_model, dev)
         search = SplitPolicySearchAgent(pnet, vnet, dev, width=args.width,
                                         replies=args.replies,
-                                        plies=args.plies)
+                                        plies=args.plies,
+                                        scalar_value=args.scalar_value)
         search_name = f"policy {args.model} + value {args.value_model}"
     else:
         vman = man

@@ -93,7 +93,7 @@ def main():
     for bid in IDS:
         net, man = baselines.load_baseline(bid, dev)
         depth = man.get("inference", {}).get("search_depth_plies", 1) or 1
-        if man.get("model_type") == "value_policy":
+        if man.get("model_type") in ("value_policy", "value_policy_eval"):
             agents[bid] = PolicyAgent(net, dev)
         else:
             agents[bid] = SearchAgent(net, dev, plies=depth)

@@ -603,7 +603,7 @@ class PolicySearchAgent:
     def _forward(self, planes):
         out = self.net(torch.from_numpy(planes).to(self.dev))
         if isinstance(out, tuple):
-            v, p = out
+            v, p = out[0], out[1]
         else:
             v, p = out, None
         v = torch.softmax(v, 1)
@@ -720,13 +720,14 @@ class SplitPolicySearchAgent:
     """
 
     def __init__(self, policy_net, value_net, dev="cpu", width=12, replies=8,
-                 plies=2):
+                 plies=2, scalar_value=False):
         self.policy_net = policy_net
         self.value_net = value_net
         self.dev = dev
         self.width = width
         self.replies = replies
         self.plies = plies
+        self.scalar_value = scalar_value
         self.last_q = None
 
     @torch.no_grad()
@@ -738,6 +739,10 @@ class SplitPolicySearchAgent:
     @torch.no_grad()
     def _value(self, planes):
         out = self.value_net(torch.from_numpy(planes).to(self.dev))
+        if self.scalar_value:
+            if not isinstance(out, tuple) or len(out) < 3:
+                raise ValueError("scalar_value=True needs a ValuePolicyEvalNet")
+            return out[2].cpu().numpy()
         v = out[0] if isinstance(out, tuple) else out
         v = torch.softmax(v, 1)
         return (v[:, 2] - v[:, 0]).cpu().numpy()

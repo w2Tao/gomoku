@@ -21,6 +21,13 @@ from dataset import load                                 # noqa: E402
 
 FIELDS = ("own", "opp", "last", "ply", "cls", "game_id", "move",
           "value_target", "value_weight")
+# Optional fields added by the eval-distillation collector. Old shards lack
+# them; fill neutral values so merging remains backwards compatible.
+OPTIONAL = {
+    "eval": (np.int32, -(2 ** 31)),
+    "eval_weight": (np.float32, 0.0),
+    "outcome": (np.int8, -1),
+}
 
 
 def main():
@@ -40,10 +47,13 @@ def main():
             if k == "game_id":
                 v = v + offset
             merged.setdefault(k, []).append(v)
+        for k, (dtype, default) in OPTIONAL.items():
+            v = p.get(k, np.full(n, default, dtype=dtype))
+            merged.setdefault(k, []).append(v)
         total += n
         offset = int(merged["game_id"][-1].max()) + 1 if merged["game_id"] else 0
 
-    for k in FIELDS:
+    for k in list(FIELDS) + list(OPTIONAL):
         merged[k] = np.concatenate(merged[k])
 
     games = np.unique(merged["game_id"])
@@ -62,6 +72,7 @@ def main():
                           + ", ".join(os.path.basename(p) for p in sys.argv[2:])),
         "shards": len(parts),
         "positions": int(total),
+        "eval_labels": int((merged["eval_weight"] > 0).sum()),
         "games": int(len(games)),
         "split": "by game",
     }))

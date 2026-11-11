@@ -705,3 +705,123 @@ policy loss/acc 在蒸馏后明显好于 v1（1.41 → 1.22，53.0% → 58.6%）
 - 下一步要么把 value 当成独立任务单独训练（更大数据、搜索目标、或 RAPFI 的 `Eval`
   软标签），要么先不把 value 放进决策回路。在 value 达标之前，`v1` 仍然是默认模型；
   `v2base` 不替换默认。
+
+---
+
+## 10. v3：把 RAPFI 的 Eval 存成软价值标签（2026-11-11）
+
+§9 的结论是价值头太粗。最直接的下一个信号是 RAPFI 的 `Eval`：它本来就在
+`MESSAGE` 里，之前的蒸馏代码直接丢掉了。这一节把 Eval 存下来、加一个标量头、
+重新训练，再测搜索。
+
+### 10.1 数据
+
+`build_distill_dataset.py` 现在保存：
+
+| 字段 | 含义 |
+|---|---|
+| `eval` | RAPFI 在 PV 头部局面的原始 `Eval`；其余位置是哨兵 |
+| `eval_weight` | 头部局面为 1，PV 其余位置为 0 |
+| `outcome` | 该手方最终是否获胜（1/0，未知 −1） |
+
+采集 2,040 局（6 分片，300 ms，random opening 6）：
+
+| 项 | 值 |
+|---|---|
+| 总标签 | 50,299 |
+| eval 标签 | **6,123** |
+| 对局 | 2,040 |
+| eval 范围 | −632 .. 1,967（中位 701，88.1% 为正） |
+| eval 标签的胜负 | **全部为 1**（RAPFI 在这批对局里全胜） |
+
+这是本轮最重要的限制：**6,123 个 eval 标签全部来自 RAPFI 最终获胜的对局**。
+RAPFI 对 `baseline` 在 300 ms 下没有输过一局；把时间降到 100 ms 的 20 局探针仍然
+全胜，降到 10 ms 又不再输出 `Eval`。而且这些 eval 标签全部落在前 10 手（RAPFI
+很快结束对局），中后盘没有监督。所以 `eval_calibrate.py` 无法用胜负标定 T：
+它报出的 best T=300 只是「全 1 标签下的最小 logloss」，不是校准值。我们按 eval
+分布（中位 701，95 分位 1,410）取 **T=700**，让 `tanh(Eval/T)` 覆盖大致 −0.6..1.0。
+
+### 10.2 架构与训练
+
+新增 `ValuePolicyEvalNet(ValuePolicyNet)`：
+
+```
+value   Conv1x1(C -> 48) + BN + ReLU + Flatten + Linear(48*225 -> 3)
+policy  Conv1x1(C -> 1) + flatten + 225 维偏置
+eval    Conv1x1(C -> 48) + BN + ReLU + Flatten + Linear(48*225 -> 1) + Tanh
+```
+
+标量头增加 **15,505** 个参数，总参数 **1,053,349**。训练目标：
+
+```
+loss = value_loss + policy_loss + 1.0 * MSE(eval_scalar, tanh(Eval / 700))
+```
+
+从 `v2s1` 暖启动，8,000 步，lr 2e-4，只在新采集的 `dist_eval` 上训练；WDL 头
+没有值监督（`value_weight=0`），因为它不是搜索要用的头。
+
+| run | 选中 step | val policy loss | policy acc | val eval loss | eval MAE |
+|---|---|---|---|---|---|
+| `v3eval` | 7,000 | 1.2262 | **58.0%** | 0.0119 | **0.0761** |
+
+标量头在留出的 602 个 eval 标签上 `corr(scalar, tanh(Eval/T)) = +0.967`：
+它确实学会了模仿 RAPFI 的 `Eval`。但「模仿 Eval」不等于「能排序着法」。
+
+复现命令：
+
+```bash
+python code/run_shards.py 6 2040 300 dist_eval 6
+python code/merge_npz.py dist_eval.npz data/dist_eval_s0.npz ... data/dist_eval_s5.npz
+python code/train_policy.py --data data/dist_eval.npz --steps 8000 --lr 2e-4 \
+       --warm ckpt/runs/v2s1/best.pt --channels 96 --blocks 6 --head-channels 48 \
+       --eval-head --eval-weight 1.0 --eval-temp 700 --tag v3eval
+python code/freeze_baseline.py --src v3eval --id v3eval \
+       --name "v3eval · 96x6 + RAPFI Eval scalar head"
+python code/scalar_eval.py v3eval --temp 700
+python code/search_eval.py v2base 30 --plies 2 --value-model v3eval --scalar-value
+```
+
+`freeze_baseline.py` 从 state dict 的 `eval_head.*` 自动识别 `value_policy_eval`，不需要
+额外参数。
+
+### 10.3 结果
+
+**策略强度（150 个配对开局 × 2 色）：**
+
+| agent | vs 冻结启发式 |
+|---|---|
+| `v2base` | 82.3% |
+| `v3eval` | 78.3% |
+
+`v3eval` 比 `v2base` 低 4.0%（−1.5σ），head-to-head 39.7%。标量头训练没有伤到
+policy 太多，但它也不是更好的 policy。
+
+**WDL 价值头**（Gomocup 留出 34,595 局面）：
+
+| model | acc | MAE(V) |
+|---|---|---|
+| `v2s1` | 78.2% | 0.532 |
+| `v3eval` | 70.0% | 0.636 |
+
+策略蒸馏照旧把 WDL 头带坏；搜索用的是标量头，不是这个 WDL 头。
+
+**策略先验搜索（30 个配对开局 × 2 色 = 60 局/行，policy=v2base，value=v3eval 标量）：**
+
+| 搜索 | policy head | 搜索 | 搜索 − policy | head-to-head |
+|---|---|---|---|---|
+| 2 层（width 12, replies 8） | 86.7% | 18.3% | −68.3%（−10.4σ） | 0.0% |
+| 1 层（width 12） | 86.7% | 6.7% | −80.0%（−14.1σ） | 0.0% |
+
+**比 §9 的 WDL 价值搜索还差。** 标量头可以高相关地复现 RAPFI 的 Eval，但把它
+放进 argmax/取 min，选出的着法对纯策略头一局都赢不了。这否掉了「只要 value 变成
+连续值就能排序」这个假设。
+
+### 10.4 判断
+
+- **Eval 软标签可用，但这一批数据不够用**：所有 eval 标签都来自 RAPFI 的胜局，
+  没有负例，无法校准到胜率；标量头只学到「在 RAPFI 自己的胜局里，Eval 是多少」。
+- **模仿老师估值 ≠ 排序我方候选**：与 §7.8 的 Q 头失败同构。要排序，需要的是
+  「这些候选着法各自的价值」这种密集/成对监督，而不是「这个局面老师打多少分」。
+- 因此 `v3eval` 也只是实验产物：不替换默认 `v1`，不发布。下一步如果继续，应该
+  优先采集**带胜负两边的 eval**（换更强/更弱的对手或让 RAPFI 受让），或者直接在
+  RAPFI 的搜索里取候选着法的分数做 dense value labels。
