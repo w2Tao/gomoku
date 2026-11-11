@@ -70,7 +70,11 @@ def get_agent(model_id: str):
     elif model_id == "random":
         a = RandomAgent()
     else:
-        net, manifest = baselines.load_baseline(model_id, DEV)
+        try:
+            net, manifest = baselines.load_baseline(model_id, DEV)
+        except (KeyError, FileNotFoundError):
+            # a stale model id (a bookmark, an old page) should not 500 the game
+            net, manifest = baselines.load_baseline(DEFAULT_MODEL, DEV)
         if manifest.get("model_type") == "value_policy":
             a = PolicyAgent(net, DEV)
         else:
