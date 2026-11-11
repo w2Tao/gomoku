@@ -112,6 +112,7 @@ gomoku/
     baseline_duel.py    基线 vs 外部对手，配对赛
     eval_three.py       多个模型互相打，逐对给分
     search_eval.py      策略先验搜索 vs 纯策略，配对评测
+    policy_eval_relation.py  检查 RAPFI 实际走子是否就是 child eval 最优
     value_eval.py       价值头的三分类准确率 / MAE
     scalar_eval.py      Eval 软价值头的标量 MAE / BCE
     eval_calibrate.py   用实际胜负标定 RAPFI Eval 的温度 T
@@ -230,6 +231,7 @@ python code/duel_many.py EMBRYO26 baseline,v1 150 6 300
 |---|---|
 | `search_ct.py` | 价值头驱动搜索（1 层 / 2 层）是否优于纯策略头 |
 | `search_eval.py` | 新的更大基座上，策略先验搜索 vs 纯策略 |
+| `policy_eval_relation.py` | RAPFI 的实际着法是否等于 1 层 child eval 最优 |
 | `value_eval.py` | 价值头的三分类准确率 / MAE，以及按手数的变化 |
 | `scalar_eval.py` | Eval 软价值头的标量精度 / 对实际胜负的校准 |
 | `eval_calibrate.py` | RAPFI `Eval` 到胜率/`tanh` 的温度标定 |

@@ -229,16 +229,31 @@ def find_exe(engine_dir, prefer=None):
 
 
 # ---- mining the engine's own narration ------------------------------------
-_EVAL_RE = re.compile(r"\bEval\s+(-?\d+)")
+# Eval can be a normal integer or a mate score such as "Eval +M47" / "-M23".
+# The old regex only matched the integer form and silently used an older
+# numeric Eval on mate lines.
+_EVAL_RE = re.compile(r"\bEval\s+([+-]?)(M\*|M\d+|\d+)")
 _PV_RE = re.compile(r"\|\s*((?:[A-Oa-o]\d{1,2}\s*)+)$")
 _MOVE_RE = re.compile(r"([A-Oa-o])(\d{1,2})")
+VALUE_MATE = 30000
+
+
+def _parse_eval(sign, token):
+    if token == "M*":
+        value = 29500
+    elif token.startswith("M"):
+        value = VALUE_MATE - int(token[1:])
+    else:
+        value = int(token)
+    return -value if sign == "-" else value
 
 
 def rapfi_targets(messages, size: int = 15):
     """Pull (eval, pv_cells) out of RAPFI's MESSAGE lines for one search.
 
     The eval is the score of the position the engine searched, from its own point of
-    view -- a continuous value target, far denser than a game result.
+    view -- a continuous value target, far denser than a game result. Mate scores
+    are returned as +/- (VALUE_MATE - ply), e.g. `+M47` -> 29953.
 
     The principal variation is a whole line, so one call can label several
     positions. Note the coordinate base: `TURN x,y` is 0-based, but the PV's row
@@ -249,7 +264,7 @@ def rapfi_targets(messages, size: int = 15):
     for line in messages:
         e = _EVAL_RE.search(line)
         if e:
-            evals.append(int(e.group(1)))
+            evals.append(_parse_eval(e.group(1), e.group(2)))
         m = _PV_RE.search(line)
         if m:
             cells = []

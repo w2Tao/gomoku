@@ -825,3 +825,38 @@ policy 太多，但它也不是更好的 policy。
 - 因此 `v3eval` 也只是实验产物：不替换默认 `v1`，不发布。下一步如果继续，应该
   优先采集**带胜负两边的 eval**（换更强/更弱的对手或让 RAPFI 受让），或者直接在
   RAPFI 的搜索里取候选着法的分数做 dense value labels。
+
+---
+
+## 11. RAPFI 的“走子 vs child eval”关系（pilot）
+
+问题：RAPFI 的 `policy`（实际走出的那一手）是否等于“让 child eval 最低”的那一手？
+child 是对手走，所以正确方向是 **argmin `Eval(child)`**，不是 argmax。
+
+方法：8 个 Gomocup 局面；`BOARD` 设局面；1 s 时限定 RAPFI 的根着法；再对**每个合法
+child** 用 1 s 重新 `BOARD` 评估；比较根着法在 child eval 中的排名。8 个 engine
+worker 并行。
+
+结果：
+
+| 指标 | 值 |
+|---|---|
+| 根着法 = child eval 最小 | **8/8（100%）** |
+| 有 ≥10 个可评估 child 的局面 | **6/6 都是 rank 1** |
+| child 数范围 | 1–219（6 个局面有 175–219 个） |
+| mean rank | **1.00** |
+| median rank | **1.00** |
+
+也就是说，在这批 1 s 重搜的样本里，RAPFI 实际选的着法确实**最小化对手视角的 child
+Eval**，支持“同一次搜索内部 policy 与 eval 贪心一致”的直觉。注意：
+
+- 这是**同一时限重新评估**，不是拿根搜索的 Q 直接读；根 `Eval` 和 child 重搜值可能
+  因为深度/时限不一致而不同（样本里就有根 `-817`、child `+M41` 的情况），但**排序**
+  仍然一致。
+- 只有 8 个局面，且 2 个局面只有 1 个可评估 child；这是 pilot，不是统计结论。
+- 测试过程中修了两个会影响结论的实现细节：
+  1. `BOARD` 的落子必须**交替颜色**输出，否则引擎会自动插入 PASS，改变历史；
+  2. `Eval +M47` 这类 mate 格式必须单独解析，旧的正则只会回退到更早的数值 Eval。
+  两者都已写进 `pbrain.py` / `policy_eval_relation.py`。
+- 这里比较的是 RAPFI 的**最终走子**，不是 NN 的 policy prior；prior 只是搜索排序先验，
+  不能保证满足这个关系。
