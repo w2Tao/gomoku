@@ -52,9 +52,15 @@ def main():
                          replace=False).tolist())
     merged["is_val"] = np.isin(merged["game_id"], list(val))
     # dataset.load requires meta
+    # Keep the teacher's name. The shards record it, and overwriting it here left
+    # the finished dataset unable to answer "distilled from what".
+    src = next((str(p["meta"].get("source")) for p in parts
+                if isinstance(p.get("meta"), dict) and p["meta"].get("source")),
+               None)
     merged["meta"] = np.array(json.dumps({
-        "source": f"merged from {len(parts)} shards: "
-                  + ", ".join(os.path.basename(p) for p in sys.argv[2:]),
+        "source": src or (f"merged from {len(parts)} shards: "
+                          + ", ".join(os.path.basename(p) for p in sys.argv[2:])),
+        "shards": len(parts),
         "positions": int(total),
         "games": int(len(games)),
         "split": "by game",
