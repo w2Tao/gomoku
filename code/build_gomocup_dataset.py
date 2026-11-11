@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+from collections import Counter
 import os
 
 import numpy as np
@@ -54,6 +55,35 @@ def parse(path):
         except ValueError:
             break
     return moves
+
+
+def common_opening(files, coverage=0.9, limit=12):
+    """The prefix that nearly every game shares, as 0-indexed cells.
+
+    Gomocup starts each game from one fixed opening -- in Freestyle15_2 the first
+    three moves are identical across the whole league and carry a timestamp of 0.
+    Those plies produce byte-identical positions with identical labels thousands of
+    times: 7.5% of this dataset was one repeated opening. They teach a lookup table,
+    not gomoku.
+
+    A strict common prefix is too brittle here: a handful of outlier games collapse
+    it to nothing, which is exactly what happened first. So a ply only counts as
+    shared when `coverage` of the games agree on it.
+    """
+    seqs = [[(y - 1) * W + (x - 1) for x, y in parse(p)] for p in files]
+    seqs = [s for s in seqs if s]
+    if not seqs:
+        return []
+    prefix = []
+    for depth in range(limit):
+        counts = Counter(s[depth] for s in seqs if len(s) > depth)
+        if not counts:
+            break
+        mv, n = counts.most_common(1)[0]
+        if n / len(seqs) < coverage:
+            break
+        prefix.append(mv)
+    return prefix
 
 
 def replay(moves):
@@ -85,7 +115,12 @@ def main():
     ap.add_argument("--root", default=os.path.join("data", "gomocup"))
     ap.add_argument("--leagues", default=",".join(LEAGUES))
     ap.add_argument("--val-frac", type=float, default=0.1)
+    ap.add_argument("--dedupe", type=int, default=1,
+                    help="collapse rows identical in position, move, ply and outcome")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--skip-opening", default="auto",
+                    help="'auto' drops the prefix every game shares, or give a count; "
+                         "0 keeps everything")
     args = ap.parse_args()
     if not os.path.dirname(args.out):
         args.out = paths.data(args.out)
@@ -96,8 +131,24 @@ def main():
     games = kept = skipped = 0
     ply_hist = {}
 
-    for league in [s.strip() for s in args.leagues.split(",") if s.strip()]:
-        files = sorted(glob.glob(os.path.join(args.root, league, "*.psq")))
+    leagues = [s.strip() for s in args.leagues.split(",") if s.strip()]
+    league_files = {lg: sorted(glob.glob(os.path.join(args.root, lg, "*.psq")))
+                    for lg in leagues}
+    league_skip = {}
+    for lg in leagues:
+        if args.skip_opening == "auto":
+            prefix = common_opening(league_files[lg])
+            league_skip[lg] = len(prefix)
+            shown = " ".join(f"({c % W},{c // W})" for c in prefix[:6])
+            print(f"opening   : {lg} drops {len(prefix)} shared plies"
+                  f"{'  ' + shown if prefix else '  (none shared)'}")
+        else:
+            league_skip[lg] = int(args.skip_opening)
+            print(f"opening   : {lg} drops {league_skip[lg]} plies (forced)")
+    print()
+
+    for league in leagues:
+        files = league_files[league]
         for path in files:
             games += 1
             moves = parse(path)
@@ -111,11 +162,17 @@ def main():
             bb = [0, 0]
             occ = 0
             last = -1
-            for k in range(1, n):
-                idx = (moves[k - 1][1] - 1) * W + (moves[k - 1][0] - 1)
-                bb[(k - 1) % 2] |= 1 << idx
-                occ |= 1 << idx
-                last = idx
+            for k in range(0, n):
+                # k is the index of the move about to be played, so k stones are on
+                # the board. Starting at 0 keeps the empty-board position: without it
+                # the model never sees a single example of its own first move.
+                if k > 0:
+                    idx = (moves[k - 1][1] - 1) * W + (moves[k - 1][0] - 1)
+                    bb[(k - 1) % 2] |= 1 << idx
+                    occ |= 1 << idx
+                    last = idx
+                if k < league_skip[league]:
+                    continue        # stones placed, but this ply is identical in every game
                 mover = k % 2
                 cls = 2 if winner == mover else 0
                 owns.append(bb[mover])
@@ -135,6 +192,36 @@ def main():
     print(f"kept      : {kept}  ({kept/max(games,1):.1%})")
     print(f"skipped   : {skipped}  (illegal, or no five-in-a-row)")
     print(f"positions : {len(clss):,}")
+
+    if args.dedupe and clss:
+        # The same position recurs across games, sometimes thousands of times: the
+        # leagues replay a handful of openings, and one position turned up 8,403
+        # times. Identical rows carry no information but do distort the sampling
+        # distribution, so they are collapsed. Rows are only merged when the move
+        # *and* the outcome agree -- the same position with different results is
+        # real ambiguity and is kept.
+        own_a = np.asarray(owns, dtype=object) if owns and isinstance(owns[0], int) else None
+        key_rows = list(zip(owns, opps, lasts, plies, clss, move_out))
+        seen, keep = set(), []
+        for i, row in enumerate(key_rows):
+            k = (row[0], row[1], row[2], row[3], row[4], row[5])
+            if k in seen:
+                continue
+            seen.add(k)
+            keep.append(i)
+        before = len(clss)
+        owns = [owns[i] for i in keep]
+        opps = [opps[i] for i in keep]
+        lasts = [lasts[i] for i in keep]
+        plies = [plies[i] for i in keep]
+        gids = [gids[i] for i in keep]
+        clss = [clss[i] for i in keep]
+        move_out = [move_out[i] for i in keep]
+        vt_out = [vt_out[i] for i in keep]
+        vw_out = [vw_out[i] for i in keep]
+        print(f"dedupe    : {before:,} -> {len(clss):,}  "
+              f"({before - len(clss):,} identical rows dropped, "
+              f"{(before-len(clss))/max(before,1):.1%})")
 
     cls = np.asarray(clss, dtype=np.uint8)
     ply = np.asarray(plies, dtype=np.uint8)
