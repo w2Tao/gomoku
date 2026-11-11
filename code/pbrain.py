@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import os
 import queue
+import re
 import subprocess
 import threading
 import time
@@ -46,6 +47,7 @@ class Pbrain:
         self.proc = None
         self._q = None
         self._pump = None
+        self.last_messages = []
 
     # ---- lifecycle ----------------------------------------------------
     def start(self):
@@ -105,6 +107,11 @@ class Pbrain:
     def _await(self, pred, timeout, required=True):
         """Read until `pred(line)`, skipping diagnostics.
 
+        Every line seen is kept in `self.last_messages` so a caller can mine the
+        engine's search narration -- RAPFI reports `Eval` and its principal
+        variation there, which is the only way to get a teacher's soft targets out
+        of this protocol (see `rapfi_targets`).
+
         Two independent limits, because they catch different failures:
 
         * `stall_s` -- no output at all for this long. The engine is wedged (bad
@@ -113,6 +120,7 @@ class Pbrain:
         * `timeout` -- total time for this answer. Kept much larger than the move
           budget so a slow move is not mistaken for a hang.
         """
+        self.last_messages = []
         start = time.time()
         last_output = start
         while True:
@@ -127,6 +135,7 @@ class Pbrain:
             except queue.Empty:
                 continue
             last_output = time.time()
+            self.last_messages.append(line)
             if self.verbose:
                 print(f"    < {line}")
             if line.startswith("ERROR"):
@@ -217,3 +226,44 @@ def find_exe(engine_dir, prefer=None):
             if prefer.lower() in os.path.basename(c).lower():
                 return c
     return cands[0]
+
+
+# ---- mining the engine's own narration ------------------------------------
+_EVAL_RE = re.compile(r"\bEval\s+(-?\d+)")
+_PV_RE = re.compile(r"\|\s*((?:[A-Oa-o]\d{1,2}\s*)+)$")
+_MOVE_RE = re.compile(r"([A-Oa-o])(\d{1,2})")
+
+
+def rapfi_targets(messages, size: int = 15):
+    """Pull (eval, pv_cells) out of RAPFI's MESSAGE lines for one search.
+
+    The eval is the score of the position the engine searched, from its own point of
+    view -- a continuous value target, far denser than a game result.
+
+    The principal variation is a whole line, so one call can label several
+    positions. Note the coordinate base: `TURN x,y` is 0-based, but the PV's row
+    digit is **1-based**. `G7` is column 6, row 7 (1-based) = 0-based (6,6).
+    Parsing the digit as 0-based shifts every move one row down.
+    """
+    evals, pvs = [], []
+    for line in messages:
+        e = _EVAL_RE.search(line)
+        if e:
+            evals.append(int(e.group(1)))
+        m = _PV_RE.search(line)
+        if m:
+            cells = []
+            for tok in m.group(1).split():
+                g = _MOVE_RE.fullmatch(tok)
+                if not g:
+                    cells = []
+                    break
+                col = ord(g.group(1).upper()) - ord("A")
+                row = int(g.group(2)) - 1           # 1-based in the PV
+                if not (0 <= col < size and 0 <= row < size):
+                    cells = []
+                    break
+                cells.append(row * size + col)
+            if cells:
+                pvs.append(cells)
+    return (evals[-1] if evals else None), (pvs[-1] if pvs else [])
