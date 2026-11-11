@@ -124,7 +124,10 @@ solver 打标大约产生 4.7 个胜局对 1 个负局，因为证明胜只需�
 所有数据集都是 `.npz`，其中 `meta` 字段带一段 JSON 描述。
 
 当前在用的两份已发布到 Hugging Face（[`w2Tao/gomoku-15x15`](https://huggingface.co/datasets/w2Tao/gomoku-15x15)）：
-`gomocup15.npz`（Gomocup 引擎棋谱，50 万局面）和 `teacher15.npz`（启发式自博弈，15 万局面）。
+`gomocup15.npz`（Gomocup 引擎棋谱）和 `teacher15.npz`（启发式自博弈，15 万局面）。
+`gomocup15.npz` 在建库时会按「局面 + 着法 + 手数 + 胜负」去重——棋谱里三分之一的记录是
+完全重复的（联赛反复使用同一批开局），去重后 34.5 万局面。发布在 Hub 上的仍是有重复的
+50 万版，所以本地重建出的文件与下载得到的不是同一份，见 `report.md` §7.16。
 两者的 schema 完全相同，训练时只换 `--data`。字段表见数据集卡片或 `report.md` §6。
 
 | 字段 | 含义 |
