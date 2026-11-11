@@ -28,12 +28,15 @@ def _history_loss(entry, lam, eval_weight=0.0):
     """The objective actually selected on during training.
 
     `train.py` records a single `loss`; `train_policy.py` records `value_loss` and
-    `policy_loss` separately, and `ValuePolicyEvalNet` runs add `eval_loss`.
-    Reading only `loss` (the old behaviour) silently produced `val_loss: null`
-    for every value_policy baseline.
+    `policy_loss`; `train_eval.py` records a scalar `mae`. Reading only `loss`
+    (the old behaviour) silently produced `val_loss: null` for every
+    value_policy baseline.
     """
     if entry.get("loss") is not None:
         return float(entry["loss"])
+    if ("value_loss" not in entry and "policy_loss" not in entry
+            and entry.get("mae") is not None):
+        return float(entry["mae"])
     loss = (float(entry.get("value_loss", 0.0))
             + lam * float(entry.get("policy_loss", 0.0)))
     if eval_weight:
@@ -98,8 +101,10 @@ def main():
     # A `ValuePolicyNet` carries a policy head; play it straight off that head.
     has_policy = any(k.startswith("policy_") for k in ck["state_dict"])
     has_eval = any(k.startswith("eval_") for k in ck["state_dict"])
-    if has_eval:
+    if has_eval and has_policy:
         model_type = "value_policy_eval"
+    elif has_eval:
+        model_type = "value_eval"
     elif has_policy:
         model_type = "value_policy"
     else:
@@ -107,7 +112,7 @@ def main():
     n_par = metrics.get("params") or sum(
         v.numel() for v in ck["state_dict"].values())
 
-    if has_eval:
+    if model_type == "value_policy_eval":
         recipe = {
             "head": "policy + value (eval-trained scalar)",
             "search": "policy prior; scalar value for leaves",
@@ -116,6 +121,16 @@ def main():
         limits = [
             "the scalar head imitates RAPFI's Eval, not game-theoretic values",
             "search over this value has not been shown to beat the policy head",
+        ]
+    elif model_type == "value_eval":
+        recipe = {
+            "head": "scalar eval only",
+            "search": "1-ply greedy over legal children",
+            "selection": "argmin child Eval (maximise our value)",
+        }
+        limits = [
+            "one-ply horizon; no VCF/double-three search",
+            "labels are RAPFI Eval at a fixed time, not game-theoretic values",
         ]
     elif has_policy:
         recipe = {
@@ -174,12 +189,14 @@ def main():
             "policy_loss": best.get("policy_loss"),
             "policy_acc": best.get("policy_acc"),
             "eval_loss": best.get("eval_loss"),
-            "eval_mae": best.get("eval_mae"),
-            "eval_labels": best.get("eval_labels"),
+            "eval_mae": best.get("mae", best.get("eval_mae")),
+            "eval_corr": best.get("corr"),
+            "eval_labels": best.get("eval_labels", best.get("n")),
             "eval_weight": eval_weight,
             "step": best.get("step"),
-            "loss_kind": ("value + policy + eval" if has_eval
-                          else ("value + policy" if has_policy else "value")),
+            "loss_kind": ("value + policy + eval" if has_eval and has_policy
+                          else ("eval MAE" if has_eval
+                                else ("value + policy" if has_policy else "value"))),
             "vs_heuristic_paired": args.vs_heuristic,
             "vs_heuristic_note": args.metric_note,
         },

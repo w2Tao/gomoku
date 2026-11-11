@@ -135,7 +135,8 @@ def main():
         nc, no = own.bit_count(), opp.bit_count()
         if nc == no:
             black, white = own, opp
-        elif nc == no + 1:
+        elif no == nc + 1:
+            # side to move is white: black (opponent) has one more stone
             black, white = opp, own
         else:
             continue

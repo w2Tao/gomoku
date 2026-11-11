@@ -19,7 +19,8 @@ import torch
 import baselines
 import paths
 from engine import CELLS, has_five
-from play import PolicyAgent, SearchAgent, frozen_heuristic
+from play import (EvalGreedyAgent, PolicyAgent, SearchAgent,
+                  frozen_heuristic)
 
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 150
 OPENING = 4
@@ -95,6 +96,8 @@ def main():
         depth = man.get("inference", {}).get("search_depth_plies", 1) or 1
         if man.get("model_type") in ("value_policy", "value_policy_eval"):
             agents[bid] = PolicyAgent(net, dev)
+        elif man.get("model_type") == "value_eval":
+            agents[bid] = EvalGreedyAgent(net, dev)
         else:
             agents[bid] = SearchAgent(net, dev, plies=depth)
         print(f"{bid:<12} depth {depth}  ->  {man['name']}")

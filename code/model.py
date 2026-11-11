@@ -188,6 +188,35 @@ class ValuePolicyEvalNet(ValuePolicyNet):
         return torch.softmax(value, dim=1)
 
 
+class ValueEvalNet(ValueNet):
+    """Pure scalar eval network: no policy head, no WDL head.
+
+    The trunk is the same value-network trunk. The only output is a scalar
+    `tanh` value in [-1, 1], trained on `tanh(RAPFI Eval / 400)` (RAPFI's default
+    scaling factor is 200, so `2*sigmoid(Eval/200)-1 = tanh(Eval/400)`).
+    """
+
+    has_eval = True
+
+    def __init__(self, channels: int = 48, blocks: int = 4,
+                 head_channels: int = 24, n_classes: int = N_CLASSES):
+        super().__init__(channels, blocks, head_channels, n_classes)
+        # Drop the WDL head created by ValueNet; this model is eval-only.
+        self.head = None
+        self.eval_head = nn.Sequential(
+            nn.Conv2d(channels, head_channels, 1, bias=False),
+            nn.BatchNorm2d(head_channels),
+            nn.ReLU(inplace=True),
+            nn.Flatten(),
+            nn.Linear(head_channels * CELLS, 1),
+            nn.Tanh(),
+        )
+
+    def forward(self, x):
+        trunk = self.body(self.stem(x))
+        return self.eval_head(trunk).squeeze(1)
+
+
 # ---------------------------------------------------------------------------
 def describe(model: ValueNet) -> None:
     """Layer-by-layer shapes and parameter counts."""

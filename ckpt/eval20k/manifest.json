@@ -1,0 +1,62 @@
+{
+  "id": "eval20k",
+  "name": "eval20k · pure scalar eval (RAPFI 1s, 19,442)",
+  "created": "2026-11-12T02:40:55",
+  "model_type": "value_eval",
+  "source_run": "eval20k",
+  "source_checkpoint": "C:\\Users\\Administrator\\Desktop\\dessert\\gomoku\\ckpt\\runs\\eval20k\\best.pt",
+  "source_step": 9000,
+  "board": "15x15 freestyle gomoku, no forbidden moves",
+  "architecture": {
+    "channels": 96,
+    "blocks": 6,
+    "head_channels": 48,
+    "n_classes": 3
+  },
+  "parameters": 1015921,
+  "sha256": "b65a0d5a3326a0caf6ec6362c99c0c58ad8a9442ffe77bd048b49b8eef978b4f",
+  "training": {
+    "data": "data\\eval20k.npz",
+    "steps": 12000,
+    "warm_start": "ckpt\\runs\\v2s1\\best.pt",
+    "learning_rate": 0.0003,
+    "batch": 256,
+    "seed": 0,
+    "eval_head": false,
+    "eval_weight": null,
+    "eval_temp": 400.0,
+    "augmentation": "8-fold dihedral, per sample"
+  },
+  "metrics": {
+    "val_loss": 0.24873828887939453,
+    "value_loss": null,
+    "policy_loss": null,
+    "policy_acc": null,
+    "eval_loss": null,
+    "eval_mae": 0.24873828887939453,
+    "eval_corr": 0.8373677773609526,
+    "eval_labels": 1902,
+    "eval_weight": 0.0,
+    "step": 9000,
+    "loss_kind": "eval MAE",
+    "vs_heuristic_paired": 0.405,
+    "vs_heuristic_note": "report.md section 12: 100 paired openings x 2 colours; v1 76.5%; head-to-head eval20k 22.5%",
+    "greedy_note": "1-ply argmin child Eval over all legal moves; exact win/block/opponent-five veto"
+  },
+  "inference": {
+    "head": "scalar eval only",
+    "search": "1-ply greedy over legal children",
+    "selection": "argmin child Eval (maximise our value)"
+  },
+  "known_limits": [
+    "one-ply horizon; no VCF/double-three search",
+    "labels are RAPFI Eval at a fixed time, not game-theoretic values",
+    "pure value-only greedy at one ply: 40.5% vs the frozen heuristic, worse than the policy head; RAPFI Eval fitting alone does not make a strong player"
+  ],
+  "distillation": {
+    "teacher": "RAPFI25 Eval at 1s",
+    "opening_plies": null,
+    "data": "data\\eval20k.npz",
+    "note": "96x6 scalar head; target tanh(Eval/400); 12k steps, best val MAE 0.2487"
+  }
+}

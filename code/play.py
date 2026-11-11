@@ -839,3 +839,58 @@ class SplitPolicySearchAgent:
                 q[i] = min(q[i], value[k])
         self.last_q = q
         return mine[int(np.argmax(q))]
+
+
+class EvalGreedyAgent:
+    """Pure eval-value agent: one-ply greedy over every legal child.
+
+    The network returns a scalar eval for the side to move. A child is the
+    opponent to move, so its value for us is `-eval(child)`; we choose the move
+    with the lowest child eval (equivalently the highest -child eval).
+
+    Exact win/block and an exact "opponent has an immediate five" veto are kept,
+    because a one-ply value estimate should not be allowed to overlook a
+    forced loss. No deeper VCF search is done.
+    """
+
+    def __init__(self, net, dev="cpu"):
+        self.net = net
+        self.dev = dev
+        self.last_q = None
+
+    @torch.no_grad()
+    def _values(self, planes):
+        out = self.net(torch.from_numpy(planes).to(self.dev))
+        if isinstance(out, tuple):
+            out = out[2] if len(out) >= 3 else out[0]
+        return out.cpu().numpy()
+
+    def move(self, my, their, last, rng):
+        occ = my | their
+        legal = [c for c in range(CELLS) if not (occ >> c) & 1]
+        if not legal:
+            return None
+        for c in legal:
+            if has_five(my | (1 << c)):
+                return c
+        for c in legal:
+            if has_five(their | (1 << c)):
+                return c
+
+        own_p = bb_to_plane(my)
+        opp_p = bb_to_plane(their)
+        n = len(legal)
+        planes = np.zeros((n, 3, H, W), dtype=np.float32)
+        planes[:, 0] = np.broadcast_to(opp_p[None, :], (n, CELLS)).reshape(n, H, W)
+        eye = np.eye(CELLS, dtype=np.float32)
+        for i, c in enumerate(legal):
+            planes[i, 1] = (own_p + eye[c]).reshape(H, W)
+            planes[i, 2].flat[c] = 1.0
+        q = -self._values(planes)
+        for i, c in enumerate(legal):
+            occ2 = occ | (1 << c)
+            if any(has_five(their | (1 << x))
+                   for x in range(CELLS) if not (occ2 >> x) & 1):
+                q[i] = -1.0
+        self.last_q = q
+        return legal[int(np.argmax(q))]

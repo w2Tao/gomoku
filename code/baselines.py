@@ -17,7 +17,7 @@ import os
 import torch
 
 import paths
-from model import ValueNet, ValuePolicyEvalNet, ValuePolicyNet
+from model import ValueEvalNet, ValueNet, ValuePolicyEvalNet, ValuePolicyNet
 
 BASE_DIR = str(paths.BASELINES)
 
@@ -62,7 +62,9 @@ def load_baseline(bid: str, dev: str = "cpu"):
     ck = torch.load(os.path.join(BASE_DIR, bid, "model.pt"),
                     map_location=dev, weights_only=False)
     kind = manifest.get("model_type", "value")
-    if kind == "value_policy_eval":
+    if kind == "value_eval":
+        cls = ValueEvalNet
+    elif kind == "value_policy_eval":
         cls = ValuePolicyEvalNet
     elif kind == "value_policy":
         cls = ValuePolicyNet

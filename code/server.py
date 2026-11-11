@@ -28,7 +28,8 @@ DEFAULT_MODEL = "v1"
 import baselines
 import paths
 from engine import CELLS, H, W, has_five
-from play import PolicyAgent, RandomAgent, SearchAgent, frozen_heuristic
+from play import (EvalGreedyAgent, PolicyAgent, RandomAgent, SearchAgent,
+                  frozen_heuristic)
 
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("GOMOKU_PORT", "8765"))
@@ -83,6 +84,8 @@ def get_agent(model_id: str):
             net, manifest = baselines.load_baseline(DEFAULT_MODEL, DEV)
         if manifest.get("model_type") in ("value_policy", "value_policy_eval"):
             a = PolicyAgent(net, DEV)
+        elif manifest.get("model_type") == "value_eval":
+            a = EvalGreedyAgent(net, DEV)
         else:
             a = SearchAgent(net, DEV, plies=1)
     AGENTS[model_id] = a
@@ -208,6 +211,8 @@ def prepare():
         if isinstance(agent, SearchAgent):
             # warm up at a realistic batch size: cuDNN autotunes per shape, so a
             # batch-1 probe would leave the first real move slow
+            batch = CELLS
+        elif isinstance(agent, EvalGreedyAgent):
             batch = CELLS
         elif isinstance(agent, PolicyAgent):
             # the policy path is a single forward pass per move

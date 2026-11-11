@@ -58,6 +58,14 @@ v1 的 76.3%，但外部 EMBRYO26 150 局是 32.6% 对 31.9%（z = 0.12，不显
 2 层 18.3%，纯策略头 86.7%。默认仍是 `v1`，`v3eval` 不发布。详见
 [`report.md`](report.md) §10。
 
+## v4 实验（纯 eval 网络，未替换默认）
+
+用 20k 个 baseline 局面、RAPFI 1 s `Eval` 训练一个纯标量 `ValueEvalNet`（96×6，
+1,015,921 参数），目标 `tanh(Eval/400)`；验证 MAE 0.249、corr +0.837。落子用 1 层
+贪心：对全部合法 child 取 `argmin Eval(child)`。结果 **40.5% vs 冻结启发式**，而
+v1 policy 是 76.5%，head-to-head 只有 22.5%。**更密的 Eval 标签没有让 1 层贪心变强**；
+默认仍是 `v1`，`eval20k` 不发布。详见 [`report.md`](report.md) §12。
+
 ## 快速开始
 
 模型权重和数据集体积较大，不在 git 里，发布在 Hugging Face 上。**克隆之后先跑一次下载脚本**，它会取回四个文件（基线、最终版 v1、两个数据集）并逐个校验 SHA-256（共约 5.3 MB，可重复执行，已存在的会跳过）：
@@ -113,6 +121,10 @@ gomoku/
     eval_three.py       多个模型互相打，逐对给分
     search_eval.py      策略先验搜索 vs 纯策略，配对评测
     policy_eval_relation.py  检查 RAPFI 实际走子是否就是 child eval 最优
+    build_eval_dataset.py    任意局面取 RAPFI Eval（BOARD，1 s）
+    merge_eval_shards.py     合并 eval 分片
+    run_eval_shards.py       启动 eval 分片采集
+    train_eval.py       纯标量 eval 网络训练
     value_eval.py       价值头的三分类准确率 / MAE
     scalar_eval.py      Eval 软价值头的标量 MAE / BCE
     eval_calibrate.py   用实际胜负标定 RAPFI Eval 的温度 T
@@ -126,6 +138,7 @@ gomoku/
     <baseline-id>/      model.pt + manifest.json，界面自动发现（manifest 进版本库）
     v1/                 当前 ValuePolicyNet 架构的最终形态，界面默认模型
     v2s1/ v2base/       v2 实验基座（权重本地训练，未发布；见 report.md §9）
+    eval20k/            v4 纯 eval 网络（本地实验，见 report.md §12）
     runs/<tag>/         训练过程的 checkpoint（已 git 忽略）
   data/                 数据集（全部 git 忽略，用 fetch_data.py 取回或 build_*.py 重建）
     gomocup15.npz       34.5 万局面（去重后）
@@ -233,6 +246,9 @@ python code/duel_many.py EMBRYO26 baseline,v1 150 6 300
 | `search_eval.py` | 新的更大基座上，策略先验搜索 vs 纯策略 |
 | `policy_eval_relation.py` | RAPFI 的实际着法是否等于 1 层 child eval 最优 |
 | `value_eval.py` | 价值头的三分类准确率 / MAE，以及按手数的变化 |
+| `build_eval_dataset.py` | 对任意局面取 RAPFI Eval（BOARD，1 s，按手数分层） |
+| `train_eval.py` | 纯标量 eval 网络（目标 `tanh(Eval/400)`） |
+| `run_eval_shards.py` | 分片采集 20k eval 标签并合并 |
 | `scalar_eval.py` | Eval 软价值头的标量精度 / 对实际胜负的校准 |
 | `eval_calibrate.py` | RAPFI `Eval` 到胜率/`tanh` 的温度标定 |
 | `q_eval.py` | 逐着法胜率头（Q head）能否排序着法 |

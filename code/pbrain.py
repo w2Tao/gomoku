@@ -75,6 +75,19 @@ class Pbrain:
         self._send(f"INFO timeout_match {self.match_ms}")
         return self
 
+    def restart(self):
+        """Clear the board and transposition table without restarting the process.
+
+        `RESTART` calls `Search::Engine.clear(false)` in Rapfi, so repeated
+        `BOARD` evaluations become deterministic without paying process startup
+        for every position.
+        """
+        if self.proc is None:
+            raise EngineError("engine not started")
+        self._send("RESTART")
+        self._await(lambda s: s == "OK", 5.0)
+        return self
+
     def close(self):
         if self.proc is None:
             return
